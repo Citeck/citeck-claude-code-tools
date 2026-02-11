@@ -26,26 +26,6 @@ claude plugin update citeck@citeck
 
 Or enable auto-update: `/plugin` → **Marketplaces** → `citeck` → **Enable auto-update**.
 
-### Team setup
-
-Add to `.claude/settings.json` in your project — teammates will be prompted to install automatically:
-
-```json
-{
-  "extraKnownMarketplaces": {
-    "citeck": {
-      "source": {
-        "source": "github",
-        "repo": "Citeck/citeck-claude-code-tools"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "citeck@citeck": true
-  }
-}
-```
-
 ## Plugin: citeck
 
 ### Skills
