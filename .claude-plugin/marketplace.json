@@ -1,0 +1,16 @@
+{
+  "name": "citeck",
+  "owner": {
+    "name": "Citeck"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for Citeck platform development"
+  },
+  "plugins": [
+    {
+      "name": "citeck",
+      "source": "./plugins/citeck",
+      "description": "Skills, agents and hooks for Citeck platform development"
+    }
+  ]
+}

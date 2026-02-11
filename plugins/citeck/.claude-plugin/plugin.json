@@ -1,0 +1,10 @@
+{
+  "name": "citeck",
+  "description": "Skills, agents and hooks for Citeck platform development",
+  "version": "1.0.0",
+  "author": {
+    "name": "Citeck"
+  },
+  "repository": "https://github.com/Citeck/citeck-claude-code-tools",
+  "license": "GNU"
+}
