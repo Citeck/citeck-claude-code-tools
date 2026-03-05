@@ -3,9 +3,10 @@ import json
 import sys
 import urllib.request
 import urllib.error
+from auth import get_auth_header
 
 BASE_URL = "http://localhost/gateway/api/records/delete"
-AUTH = "Basic YWRtaW46YWRtaW4="
+AUTH = get_auth_header()
 
 
 def main():

@@ -9,5 +9,8 @@ Thumbs.db
 *.swo
 *~
 
+# Python
+__pycache__/
+
 # Claude Code local state
 .claude/
