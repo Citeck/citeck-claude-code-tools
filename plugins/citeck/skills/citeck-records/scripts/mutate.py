@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import json
 import sys
-import urllib.request
-import urllib.error
-from auth import get_auth_header
+import os
 
-BASE_URL = "http://localhost/gateway/api/records/mutate"
-AUTH = get_auth_header()
+# Add plugin root to path for lib imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+from lib.records_api import request, MUTATE_PATH, RecordsApiError
 
 
 def main():
@@ -20,28 +20,12 @@ def main():
         print(f"Error: Invalid JSON argument — {e}")
         sys.exit(1)
 
-    data = json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(
-        BASE_URL,
-        data=data,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": AUTH,
-        },
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8", errors="replace")
-        print(f"Error: HTTP {e.code} {e.reason}")
-        print(f"Response: {error_body}")
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"Error: Cannot connect to Citeck — {e.reason}")
-        print("Is Citeck running on localhost? Check: http://localhost")
+        result = request(MUTATE_PATH, body)
+    except RecordsApiError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        if e.response_body:
+            print(f"Response: {e.response_body}", file=sys.stderr)
         sys.exit(1)
 
     # Summary line

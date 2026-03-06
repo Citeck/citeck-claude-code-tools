@@ -1,35 +1,20 @@
 ---
-name: citeck-records
-description: "Query Citeck ECOS Records API for searching records, loading attributes, troubleshooting, and exploring data. Use when the user needs to interact with a Citeck ECOS instance."
-allowed-tools: Bash(python3 */skills/citeck-records/scripts/query.py *, python3 */skills/citeck-records/scripts/mutate.py *), AskUserQuestion
+name: citeck-records-query
+description: "Read-only query access to Citeck ECOS Records API. Use for searching records, loading attributes, and exploring data. Does NOT include mutation capabilities."
+allowed-tools: Bash(python3 */skills/citeck-records-query/scripts/query.py *), AskUserQuestion
 ---
 
-# Citeck ECOS Records API Client
+# Citeck ECOS Records API — Read-Only Query
 
 Query Citeck ECOS platform via Records API for searching, troubleshooting, and data exploration.
+
+This skill provides READ-ONLY access. No mutation operations are available.
 
 ## Prerequisites
 
 Run `citeck:citeck-auth` first to configure your Citeck connection (URL, credentials). If you get authentication errors, re-run `citeck:citeck-auth` to update your credentials.
 
-## Scripts
-
-| Script       | Endpoint  | Purpose                      | Safety                                    |
-|--------------|-----------|------------------------------|-------------------------------------------|
-| `query.py`   | `/query`  | Search records by predicates | Read-only, safe                           |
-| `mutate.py`  | `/mutate` | Create or update records     | **Modifies data — requires confirmation** |
-
-## CRITICAL: Data Modification Safety
-
-**Mutate operations modify real data.** Before executing ANY `mutate.py`:
-
-1. **ALWAYS ask the user for explicit confirmation** via AskUserQuestion before running the command
-2. Show the user exactly what will be changed
-3. Clearly label the operation as **[MUTATE]** when presenting it
-
-Query (`query.py`) operations are read-only and safe to execute without confirmation.
-
-## 1. Query Records
+## Query Records
 
 Search records using predicate language.
 
@@ -94,13 +79,13 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/query.py '{"query":{"sourceId":"emodel/<type
 python3 ${CLAUDE_SKILL_DIR}/scripts/query.py '{"query":{"sourceId":"emodel/<type-id>","language":"predicate","query":{"t":"and","val":[{"t":"eq","att":"_type","val":"emodel/type@my-type"},{"t":"not-empty","att":"name"},{"t":"ge","att":"_created","val":"-P30D"}]},"page":{"maxItems":20}},"attributes":{"id":"?id","name":"name?str","created":"_created?str"}}'
 ```
 
-## 2. Load Attributes of a Specific Record
+## Load Attributes of a Specific Record
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/query.py '{"record":"emodel/<type-id>@<record-id>","attributes":{"id":"?id","disp":"?disp","name":"name?str","status":"_status?str","type":"_type?id","created":"_created?str","creator":"_creator?str"}}'
 ```
 
-## 3. Load Record Full Definition
+## Load Record Full Definition
 
 Get the YAML full definition of a Citeck Record:
 
@@ -108,26 +93,10 @@ Get the YAML full definition of a Citeck Record:
 python3 ${CLAUDE_SKILL_DIR}/scripts/query.py '{"record":"emodel/type@<type-id>","attributes":{"def":"?json|yaml()"}}'
 ```
 
-## 4. List All Types
+## List All Types
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/query.py '{"query":{"sourceId":"emodel/type","language":"predicate","query":{},"page":{"maxItems":100}},"attributes":{"id":"?id","name":"?disp"}}'
-```
-
-## 5. [MUTATE] Create or Update Record
-
-**Requires user confirmation before execution.**
-
-Update existing record:
-
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/mutate.py '{"record":{"id":"emodel/<type-id>@<record-id>","attributes":{"name":"New Name","_status":"approved"}}}'
-```
-
-Create new record (empty ID after @):
-
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/mutate.py '{"record":{"id":"emodel/<type-id>@","attributes":{"name":"New Record"}}}'
 ```
 
 ## Attribute Syntax Reference
