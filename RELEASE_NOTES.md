@@ -1,5 +1,15 @@
 # Релизы
 
+## v2.1.0 (2026-03-10)
+
+### ✨ Улучшения
+- **citeck-changes-to-task** разделён на два скилла: `citeck-changes-to-task` (создаёт задачу в трекере) и `citeck-changes-to-task-md` (только генерирует `task.md`)
+- Добавлено общее руководство по описанию задач (`_shared/task-description-guide.md`), используемое обоими скиллами
+- Усилен протокол dry-run в `citeck-tracker`, `citeck-manager` и `citeck-changes-to-task` — предпросмотр перед мутациями теперь обязателен
+- `citeck-changes-to-task` добавлен в агента `citeck-manager`
+
+---
+
 ## v2.0.0 (2026-03-06)
 
 Мажорный релиз — полная переработка плагина Citeck для Claude Code.
