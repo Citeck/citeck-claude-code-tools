@@ -80,14 +80,18 @@ Always use this format for every task ID mentioned in your response.
 | `create_issue.py`     | Create task/story/bug/epic       | **Creates data — requires confirmation**  |
 | `update_issue.py`     | Update issue attributes/status   | **Modifies data — requires confirmation** |
 
-## CRITICAL: Data Modification Safety
+## CRITICAL: Mandatory Dry-Run Protocol
 
-**Create and Update operations modify real data.** Before executing ANY `create_issue.py` or `update_issue.py`:
+**NEVER call `create_issue.py` or `update_issue.py` without `--dry-run` first.**
 
-1. First run with `--dry-run` to generate a preview
-2. Show the FULL preview table to the user — NEVER summarize or paraphrase the dry-run output
-3. **Ask the user for explicit confirmation** via AskUserQuestion
-4. Only then run WITHOUT `--dry-run` to apply changes
+Create and Update operations modify real data. You MUST follow this exact sequence:
+
+1. **ALWAYS** run the command with `--dry-run` first to generate a preview
+2. **Show the FULL preview table** to the user — NEVER summarize, paraphrase, or skip the dry-run output. The user must see the complete table with all fields.
+3. **Ask for explicit confirmation** via AskUserQuestion: "Create this issue?" / "Apply this update?" with options "Yes" / "Edit" / "Cancel"
+4. **Only after explicit "Yes"** — run WITHOUT `--dry-run` to apply changes
+
+**Do NOT rely on generic Bash execution confirmation.** The user MUST see the preview table before deciding. If you are about to run `create_issue.py` or `update_issue.py` and haven't shown a dry-run preview in this conversation — STOP and run `--dry-run` first.
 
 **If the user requests corrections:** re-run `--dry-run` with updated parameters and show the FULL preview table again. The user must always see the complete table before confirming, not just a text summary of what changed.
 

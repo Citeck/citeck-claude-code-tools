@@ -42,7 +42,8 @@ Or enable auto-update: `/plugin` → **Marketplaces** → `citeck` → **Enable 
 | [citeck-records](plugins/citeck/skills/citeck-records/SKILL.md) | Query Citeck Records API (search, mutate) |
 | [citeck-records-query](plugins/citeck/skills/citeck-records-query/SKILL.md) | Read-only query access to Records API (no mutations) |
 | [citeck-tracker](plugins/citeck/skills/citeck-tracker/SKILL.md) | Manage issues in Citeck Project Tracker — create, update, search tasks |
-| [citeck-changes-to-task](plugins/citeck/skills/citeck-changes-to-task/SKILL.md) | Generate task from git changes and optionally create it in Project Tracker |
+| [citeck-changes-to-task](plugins/citeck/skills/citeck-changes-to-task/SKILL.md) | Create a Citeck Project Tracker issue from current git changes |
+| [citeck-changes-to-task-md](plugins/citeck/skills/citeck-changes-to-task-md/SKILL.md) | Generate task.md file with structured task description from git changes |
 
 ### citeck-auth
 
@@ -90,17 +91,32 @@ Features:
 
 ### citeck-changes-to-task
 
-Generate a structured task description from git changes and optionally create it as an issue in Citeck Project Tracker.
+Create a Citeck Project Tracker issue directly from current git changes.
 
 ```bash
 /citeck:citeck-changes-to-task
 ```
 
 Features:
-- Analyze git diff to generate task description (task.md)
+- Analyze git diff to generate structured task description
 - Automatic type detection (Bug, Story, Task)
 - Russian-language descriptions for QA
-- Optional creation in Citeck Project Tracker
+- Dry-run preview before creation
+- Creates issue via unified `create_issue.py` (same as citeck-tracker)
+
+### citeck-changes-to-task-md
+
+Generate a `task.md` file with a structured task description from git changes. Does not create an issue in the tracker.
+
+```bash
+/citeck:citeck-changes-to-task-md
+```
+
+Features:
+- Analyze git diff to generate task description
+- Automatic type detection (Bug, Story, Task)
+- Russian-language descriptions for QA
+- Saves result to `task.md` in project root
 
 ### Skill Privilege Separation
 
@@ -127,6 +143,23 @@ The plugin includes a shared library (`plugins/citeck/lib/`) used by all skills:
 - `config.py` — credential management with multi-profile support
 - `auth.py` — OIDC and Basic Auth with token caching
 - `records_api.py` — unified Records API client
+
+## Auto-approve Permissions
+
+By default, Claude Code asks for confirmation each time a plugin script runs. To auto-approve all Citeck plugin scripts, add these rules to your global settings (`~/.claude/settings.json`):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 */.claude/plugins/**/citeck/**/scripts/*.py *)",
+      "Bash(python3 */.claude/plugins/**/citeck/**/scripts/*.py)"
+    ]
+  }
+}
+```
+
+Two rules are needed because some scripts are called with arguments and some without — the `*` wildcard requires at least one character, so a single pattern cannot cover both cases.
 
 ## Security: ~/.citeck/ Directory
 
@@ -166,11 +199,13 @@ Note: passwords are stored in plaintext in `credentials.json`. This is acceptabl
         │   ├── config.py           # Credentials management
         │   └── records_api.py      # Records API client
         ├── skills/
+        │   ├── _shared/            # Shared prompts (task description guide)
         │   ├── citeck-auth/        # Auth setup skill
         │   ├── citeck-records/     # Records API skill (query + mutate)
         │   ├── citeck-records-query/  # Read-only Records API (for agents)
         │   ├── citeck-tracker/     # Project Tracker skill
-        │   └── citeck-changes-to-task/  # Git changes to task skill
+        │   ├── citeck-changes-to-task/     # Create issue from git changes
+        │   └── citeck-changes-to-task-md/  # Generate task.md from git changes
         └── tests/                  # Unit tests
 ```
 
