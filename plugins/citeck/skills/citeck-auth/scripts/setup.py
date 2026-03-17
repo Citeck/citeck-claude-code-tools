@@ -58,7 +58,7 @@ def main():
                 authorization_endpoint = endpoints["authorization_endpoint"]
                 print(f"Discovered Keycloak: realm={realm}, eis_id={eis_id}", file=sys.stderr)
             else:
-                print(f"Warning: Could not discover OIDC endpoints, will use fallback", file=sys.stderr)
+                print("Warning: Could not discover OIDC endpoints, will use fallback", file=sys.stderr)
 
     try:
         config.save_credentials(

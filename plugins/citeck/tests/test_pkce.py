@@ -19,7 +19,6 @@ from lib.pkce import (
     _build_authorization_url,
     _exchange_code,
     CallbackServer,
-    CALLBACK_PATH,
 )
 
 TOKEN_ENDPOINT = "https://eis.example.com/auth/realms/TestRealm/protocol/openid-connect/token"

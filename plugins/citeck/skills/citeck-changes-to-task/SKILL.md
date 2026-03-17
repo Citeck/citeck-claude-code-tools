@@ -1,7 +1,7 @@
 ---
 name: citeck-changes-to-task
 description: "Create a Citeck Project Tracker issue from current git changes"
-allowed-tools: Bash(git log *, git diff *, git branch --show-current, git branch -r, git merge-base *, python3 */skills/citeck-tracker/scripts/create_issue.py *, python3 */skills/citeck-tracker/scripts/manage_projects.py *, python3 */skills/citeck-tracker/scripts/query_components.py *, python3 */skills/citeck-tracker/scripts/query_tags.py *), Read, AskUserQuestion
+allowed-tools: Bash(git log *, git diff *, git branch --show-current, git branch -r, git merge-base *), Read, AskUserQuestion, mcp__citeck__list_projects, mcp__citeck__set_project_default, mcp__citeck__query_components, mcp__citeck__query_tags, mcp__citeck__create_issue
 context: fork
 ---
 
@@ -20,16 +20,16 @@ Run `citeck:citeck-auth` first to configure your Citeck connection.
 
 ## CRITICAL: Mandatory Dry-Run Protocol
 
-**NEVER create an issue without showing a dry-run preview first.**
+**NEVER create an issue without showing a preview first.**
 
 The flow MUST always be:
 1. Build the issue parameters (type, summary, description)
-2. Run `create_issue.py --dry-run` to generate a preview
-3. Show the FULL preview table to the user — NEVER summarize or paraphrase
+2. Call `mcp__citeck__create_issue` with `preview: true` to generate a preview
+3. Show the FULL preview to the user — NEVER summarize or paraphrase
 4. Ask for explicit confirmation via AskUserQuestion
-5. Only after confirmation run WITHOUT `--dry-run`
+5. Only after confirmation call `mcp__citeck__create_issue` with `preview: false`
 
-**Do NOT ask for generic Bash execution confirmation — the user MUST see the preview table before deciding.**
+**Do NOT ask for generic confirmation — the user MUST see the preview before deciding.**
 
 ## Flow
 
@@ -49,39 +49,40 @@ Follow Steps 1-4 from the guide to:
 
 ### Step 5: Resolve project context
 
-1. Run `python3 ${CLAUDE_SKILL_DIR}/../citeck-tracker/scripts/manage_projects.py --list` to check for a default project
-2. If no default — run `python3 ${CLAUDE_SKILL_DIR}/../citeck-tracker/scripts/manage_projects.py --fetch` and ask the user which project to use
-3. Set the chosen project as default: `python3 ${CLAUDE_SKILL_DIR}/../citeck-tracker/scripts/manage_projects.py --set-default PROJECT_KEY`
+1. Call `mcp__citeck__list_projects()` to check for a default project and cached projects
+2. If no default — call `mcp__citeck__list_projects(fetch: true)` and ask the user which project to use
+3. Set the chosen project as default: `mcp__citeck__set_project_default(project: "PROJECT_KEY")`
 
 ### Step 6: Smart defaults
 
 Automatically determine:
 
 1. **Priority** from the issue context:
-   - Security vulnerabilities, data loss, system crashes → `100_urgent`
+   - Security vulnerabilities, data loss, system crashes → `100_critical`
    - Broken core functionality, blocking issues → `200_high`
    - UI bugs, minor inconveniences, improvements → `300_medium`
    - Cosmetic issues, nice-to-haves → `400_low`
 
-2. **Components** — run `python3 ${CLAUDE_SKILL_DIR}/../citeck-tracker/scripts/query_components.py` and pick relevant ones. Omit if none match.
+2. **Components** — call `mcp__citeck__query_components(project: "KEY")` and pick relevant ones. Omit if none match.
 
-3. **Tags** — run `python3 ${CLAUDE_SKILL_DIR}/../citeck-tracker/scripts/query_tags.py` and pick relevant ones. Omit if none match.
+3. **Tags** — call `mcp__citeck__query_tags(project: "KEY")` and pick relevant ones. Omit if none match.
 
-### Step 7: Dry-run preview
+### Step 7: Preview
 
-Run `create_issue.py` with `--dry-run` to preview the issue:
+Call `mcp__citeck__create_issue` with `preview: true`:
 
-```bash
-python3 ${CLAUDE_SKILL_DIR}/../citeck-tracker/scripts/create_issue.py \
-  --project <KEY> \
-  --type <task|story|bug> \
-  --summary "<Title in English>" \
-  --description "<Description in Russian>" \
-  --priority <priority> \
-  [--assignee me] \
-  [--component <ref>] \
-  [--tags <ref>] \
-  --dry-run
+```
+mcp__citeck__create_issue(
+  project: "<KEY>",
+  type: "<task|story|bug>",
+  summary: "<Title in English>",
+  description: "<Description in Russian>",
+  priority: "<priority>",
+  assignee: "me",
+  components: ["<ref>"],
+  tags: ["<ref>"],
+  preview: true
+)
 ```
 
 Show the FULL preview output to the user. Then ask via AskUserQuestion:
@@ -89,22 +90,24 @@ Show the FULL preview output to the user. Then ask via AskUserQuestion:
 > **Create this issue in Citeck?**
 > Options: "Yes, create", "Edit parameters", "Cancel"
 
-**If "Edit parameters"**: ask what to change, re-run `--dry-run` with updated params, show the FULL preview table again.
+**If "Edit parameters"**: ask what to change, re-run with `preview: true` and updated params, show the FULL preview again.
 
 ### Step 8: Create the issue
 
-If confirmed, run the same command WITHOUT `--dry-run`:
+If confirmed, call the same tool with `preview: false`:
 
-```bash
-python3 ${CLAUDE_SKILL_DIR}/../citeck-tracker/scripts/create_issue.py \
-  --project <KEY> \
-  --type <task|story|bug> \
-  --summary "<Title in English>" \
-  --description "<Description in Russian>" \
-  --priority <priority> \
-  [--assignee me] \
-  [--component <ref>] \
-  [--tags <ref>]
+```
+mcp__citeck__create_issue(
+  project: "<KEY>",
+  type: "<task|story|bug>",
+  summary: "<Title in English>",
+  description: "<Description in Russian>",
+  priority: "<priority>",
+  assignee: "me",
+  components: ["<ref>"],
+  tags: ["<ref>"],
+  preview: false
+)
 ```
 
 Report the created issue key and link to the user.

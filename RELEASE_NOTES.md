@@ -5,8 +5,7 @@
 ### ✨ Улучшения
 - **citeck-changes-to-task** разделён на два скилла: `citeck-changes-to-task` (создаёт задачу в трекере) и `citeck-changes-to-task-md` (только генерирует `task.md`)
 - Добавлено общее руководство по описанию задач (`_shared/task-description-guide.md`), используемое обоими скиллами
-- Усилен протокол dry-run в `citeck-tracker`, `citeck-manager` и `citeck-changes-to-task` — предпросмотр перед мутациями теперь обязателен
-- `citeck-changes-to-task` добавлен в агента `citeck-manager`
+- Усилен протокол dry-run в `citeck-tracker` и `citeck-changes-to-task` — предпросмотр перед мутациями теперь обязателен
 
 ---
 

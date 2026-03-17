@@ -10,7 +10,7 @@
     {
       "name": "citeck",
       "source": "./plugins/citeck",
-      "description": "Skills, agents and hooks for Citeck platform development"
+      "description": "MCP server and skills for Citeck platform development"
     }
   ]
 }

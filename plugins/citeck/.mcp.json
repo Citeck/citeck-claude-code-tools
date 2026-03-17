@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "citeck": {
+      "command": "uv",
+      "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python", "servers/citeck_mcp.py"],
+      "env": {}
+    }
+  }
+}

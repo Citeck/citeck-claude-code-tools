@@ -2,6 +2,25 @@
 
 Plugin for interacting with Citeck ECOS instances from Claude Code CLI.
 
+## Architecture
+
+This plugin uses an MCP server (FastMCP) as the primary transport layer. The server runs as a persistent process via `uv run`, providing all Citeck tools through the MCP protocol.
+
+### MCP Tools
+
+All tools are available as `mcp__citeck__<tool_name>`:
+
+- `ping` — health-check: verify the MCP server is running
+- `test_connection` — verify auth connection
+- `records_query` — raw Records API query (search by predicate, load by IDs)
+- `records_mutate` — raw Records API mutation (create/update records)
+- `list_projects` — list projects, fetch from API
+- `set_project_default` — set the default project for operations
+- `search_issues` — search issues with filters
+- `create_issue` — create issue with preview support
+- `update_issue` — update issue with preview support
+- `query_sprints`, `query_components`, `query_tags`, `query_releases` — project metadata
+
 ## Authentication
 
 The plugin supports three auth methods:
@@ -83,29 +102,16 @@ python3 scripts/setup_pkce.py --url https://citeck.example.com --client-id citec
 
 The `client_id` defaults to the server hostname if not specified.
 
-## Custom Agents
-
-The plugin includes two custom agents that Claude can delegate to automatically:
-
-### citeck-explorer
-
-Read-only agent for exploring Citeck ECOS data via Records API. Automatically used when investigating records, searching data, or exploring record structure.
-
-- Tools: Bash, Read, Grep, Glob (read-only, no Write/Edit)
-- Preloaded skill: citeck-records
-
-### citeck-manager
-
-Agent for managing Citeck Project Tracker issues — creating, updating, and searching tasks. Automatically used for multi-step tracker operations.
-
-- Tools: Bash, Read, Grep, Glob, AskUserQuestion
-- Preloaded skill: citeck-tracker
-- All mutations require dry-run preview and user confirmation before execution
-
 ## Development
+
+Install dependencies:
+```bash
+cd plugins/citeck
+uv sync --dev
+```
 
 Run tests:
 ```bash
 cd plugins/citeck
-python3 -m pytest tests/ -v
+uv run python -m pytest tests/ -v
 ```

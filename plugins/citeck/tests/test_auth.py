@@ -30,7 +30,6 @@ from lib.auth import (
     TOKEN_EXPIRY_MARGIN,
     DEFAULT_REALM,
     DEFAULT_EIS_ID,
-    FALLBACK_TOKEN_PATH,
 )
 from lib.config import save_credentials
 
