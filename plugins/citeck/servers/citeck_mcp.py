@@ -38,9 +38,15 @@ mcp = FastMCP(
     "citeck",
     instructions=(
         "Citeck ECOS platform tools — query records, manage tracker issues.\n\n"
-        "When investigating a specific issue (e.g. by ID like COREDEV-3703), "
-        "use query_comments to fetch its comments — they often contain important "
-        "context, discussion, and decisions about the issue."
+        "When investigating a specific issue (e.g. by ID like COREDEV-3703):\n"
+        "1. Use search_issues to get issue details.\n"
+        "2. Use query_comments to fetch comments — they contain important context, "
+        "discussion, and decisions.\n"
+        "3. If comments contain images (imageUrls is non-empty), AUTOMATICALLY "
+        "download each image with download_attachment and read the downloaded file "
+        "with the Read tool to understand screenshots and visual context. "
+        "Do this without asking the user — images in bug reports are essential for "
+        "understanding the issue."
     ),
 )
 
@@ -1228,7 +1234,7 @@ def download_attachment(
 ) -> dict:
     """Download a file from Citeck via authenticated session and return its local path.
 
-    Saves the file to a temporary location. Use the Read tool with the returned
+    Saves the file to ~/.citeck/downloads/. Use the Read tool with the returned
     path to view the file contents. Supports images, PDFs, and other binary files.
 
     Args:
@@ -1266,7 +1272,10 @@ def download_attachment(
             ext = _EXT_OVERRIDES.get(content_type, mimetypes.guess_extension(content_type) or "")
             data = resp.read()
 
-        tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+        downloads_dir = os.path.join(config_dir or os.path.expanduser("~/.citeck"), "downloads")
+        os.makedirs(downloads_dir, exist_ok=True)
+
+        tmp = tempfile.NamedTemporaryFile(dir=downloads_dir, suffix=ext, delete=False)
         try:
             tmp.write(data)
             tmp.flush()
