@@ -19,6 +19,8 @@ All tools are available as `mcp__citeck__<tool_name>`:
 - `search_issues` — search issues with filters
 - `create_issue` — create issue with preview support
 - `update_issue` — update issue with preview support
+- `query_comments` — fetch comments for a record with auto-download of image attachments
+- `download_attachment` — download a file from Citeck via authenticated session
 - `query_sprints`, `query_components`, `query_tags`, `query_releases` — project metadata
 
 ## Authentication

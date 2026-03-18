@@ -62,6 +62,8 @@ The plugin provides an MCP server with the following tools, available as `mcp__c
 | `search_issues` | Search issues with filters (status, assignee, type, sprint, etc.) |
 | `create_issue` | Create a new issue with preview support |
 | `update_issue` | Update an existing issue with preview support |
+| `query_comments` | Fetch comments for a record with auto-download of image attachments |
+| `download_attachment` | Download a file from Citeck via authenticated session |
 | `query_sprints` | List sprints for a project |
 | `query_components` | List components for a project |
 | `query_tags` | List tags for a project |
@@ -131,6 +133,7 @@ The plugin stores credentials and tokens in `~/.citeck/`:
 ```
 ~/.citeck/
 ├── credentials.json          # Profiles with URL, username, password (chmod 600)
+├── downloads/                # Downloaded attachments (images, PDFs, etc.)
 └── tokens/
     └── <profile>/
         └── token.json        # Cached OIDC tokens (chmod 600)
@@ -153,7 +156,7 @@ Note: passwords are stored in plaintext in `credentials.json`. This is acceptabl
 └── plugins/
     └── citeck/                     # Plugin
         ├── .claude-plugin/
-        │   └── plugin.json         # Plugin manifest (v3.0.0)
+        │   └── plugin.json         # Plugin manifest (v3.2.2)
         ├── .mcp.json               # MCP server config (uv run)
         ├── pyproject.toml           # Python dependencies (FastMCP)
         ├── servers/
