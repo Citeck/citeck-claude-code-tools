@@ -41,12 +41,11 @@ mcp = FastMCP(
         "When investigating a specific issue (e.g. by ID like COREDEV-3703):\n"
         "1. Use search_issues to get issue details.\n"
         "2. Use query_comments to fetch comments — they contain important context, "
-        "discussion, and decisions.\n"
-        "3. If comments contain images (imageUrls is non-empty), AUTOMATICALLY "
-        "download each image with download_attachment and read the downloaded file "
-        "with the Read tool to understand screenshots and visual context. "
-        "Do this without asking the user — images in bug reports are essential for "
-        "understanding the issue."
+        "discussion, and decisions. Images are auto-downloaded to local files.\n"
+        "3. If comments contain images (non-empty 'images' list with 'path' values), "
+        "AUTOMATICALLY read each downloaded file with the Read tool to understand "
+        "screenshots and visual context. Do this without asking the user — images "
+        "in bug reports are essential for understanding the issue."
     ),
 )
 
@@ -1087,20 +1086,25 @@ def _strip_html(text: str | None) -> str:
     return re.sub(r"\s+", " ", stripper.get_text()).strip()
 
 
-def _extract_image_urls(html: str | None, base_url: str | None = None) -> list[str]:
-    """Extract and resolve image URLs from an HTML string."""
+def _extract_image_urls(html: str | None, base_url: str | None = None) -> list[dict]:
+    """Extract and resolve image URLs from an HTML string.
+
+    Returns list of dicts with 'src' (original from HTML) and 'url' (resolved).
+    """
     if not html:
         return []
     stripper = _HTMLStripper()
     stripper.feed(html)
     srcs = stripper.get_image_srcs()
-    resolved = []
+    seen = set()
+    result = []
     for src in srcs:
-        if base_url:
-            resolved.append(urllib.parse.urljoin(base_url.rstrip("/") + "/", src))
-        else:
-            resolved.append(src)
-    return list(dict.fromkeys(resolved))
+        if src in seen:
+            continue
+        seen.add(src)
+        resolved = urllib.parse.urljoin(base_url.rstrip("/") + "/", src) if base_url else src
+        result.append({"src": src, "url": resolved})
+    return result
 
 
 # --- Comments ---
@@ -1149,12 +1153,13 @@ def _format_comments(records: list[dict], base_url: str | None = None) -> list[d
             modifier = {"displayName": str(modifier_raw or "")}
 
         raw_text = attrs.get("text") or ""
-        image_urls = _extract_image_urls(raw_text, base_url)
+        image_info = _extract_image_urls(raw_text, base_url)
         comments.append({
             "id": rec.get("id", ""),
             "text": _strip_html(raw_text),
             "textHtml": raw_text,
-            "imageUrls": image_urls,
+            "imageUrls": [img["url"] for img in image_info],
+            "_image_info": image_info,
             "created": attrs.get("created") or "",
             "modified": attrs.get("modified") or "",
             "creator": creator,
@@ -1176,6 +1181,9 @@ def query_comments(
 
     Comments are sorted newest first. The 'text' field is plain text
     (HTML stripped); 'textHtml' preserves the original HTML.
+    Images from comments are automatically downloaded to ~/.citeck/downloads/
+    and returned as 'images' list with local file paths. Use the Read tool
+    to view the downloaded images.
 
     Args:
         record_ref: Full record reference (e.g. "emodel/ept-issue@COREDEV-3703").
@@ -1208,6 +1216,40 @@ def query_comments(
             base_url = creds["url"].rstrip("/")
         comments = _format_comments(records, base_url=base_url)
 
+        # Auto-download images from comments and replace URLs with local paths
+        if base_url:
+            try:
+                auth_header = get_auth_header(profile=profile, config_dir=config_dir)
+                for comment in comments:
+                    images = []
+                    html = comment.get("textHtml", "")
+                    for img in comment.pop("_image_info", []):
+                        img_url = img["url"]
+                        raw_src = img["src"]
+                        try:
+                            dl = _download_file(img_url, auth_header, base_url, config_dir)
+                            images.append({"url": img_url, "path": dl["path"], "content_type": dl["content_type"]})
+                            if dl["path"] and html:
+                                # Try both decoded src and HTML-encoded version
+                                html = html.replace(raw_src, dl["path"])
+                                html_encoded_src = raw_src.replace("&", "&amp;")
+                                if html_encoded_src != raw_src:
+                                    html = html.replace(html_encoded_src, dl["path"])
+                        except Exception:
+                            images.append({"url": img_url, "path": None, "error": "download failed"})
+                    comment["images"] = images
+                    if html != comment.get("textHtml", ""):
+                        comment["textHtml"] = html
+            except Exception:
+                # Auth failed — leave images empty, comments are still useful
+                for comment in comments:
+                    comment.pop("_image_info", None)
+                    comment["images"] = []
+        else:
+            for comment in comments:
+                comment.pop("_image_info", None)
+                comment["images"] = []
+
         result: dict = {
             "ok": True,
             "count": len(comments),
@@ -1226,6 +1268,39 @@ def query_comments(
 
 
 _EXT_OVERRIDES = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif"}
+
+
+def _download_file(url: str, auth_header: str, base_url: str, config_dir: str | None) -> dict:
+    """Download a file from Citeck and save to ~/.citeck/downloads/.
+
+    Returns dict with 'path', 'content_type', 'size' on success.
+    Raises on network/IO errors.
+    """
+    abs_url = urllib.parse.urljoin(base_url + "/", url) if not url.startswith("http") else url
+
+    req = urllib.request.Request(
+        abs_url,
+        headers={"Authorization": auth_header},
+        method="GET",
+    )
+
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        content_type = resp.headers.get("Content-Type", "application/octet-stream").split(";")[0].strip()
+        ext = _EXT_OVERRIDES.get(content_type, mimetypes.guess_extension(content_type) or "")
+        data = resp.read()
+
+    downloads_dir = os.path.join(config_dir or os.path.expanduser("~/.citeck"), "downloads")
+    os.makedirs(downloads_dir, exist_ok=True)
+
+    tmp = tempfile.NamedTemporaryFile(dir=downloads_dir, suffix=ext, delete=False)
+    try:
+        tmp.write(data)
+        tmp.flush()
+        tmp_path = tmp.name
+    finally:
+        tmp.close()
+
+    return {"path": tmp_path, "content_type": content_type, "size": len(data)}
 
 
 @mcp.tool
@@ -1257,38 +1332,9 @@ def download_attachment(
             }
 
         base_url = creds["url"].rstrip("/")
-        abs_url = urllib.parse.urljoin(base_url + "/", url) if not url.startswith("http") else url
-
         auth_header = get_auth_header(profile=profile, config_dir=config_dir)
-
-        req = urllib.request.Request(
-            abs_url,
-            headers={"Authorization": auth_header},
-            method="GET",
-        )
-
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            content_type = resp.headers.get("Content-Type", "application/octet-stream").split(";")[0].strip()
-            ext = _EXT_OVERRIDES.get(content_type, mimetypes.guess_extension(content_type) or "")
-            data = resp.read()
-
-        downloads_dir = os.path.join(config_dir or os.path.expanduser("~/.citeck"), "downloads")
-        os.makedirs(downloads_dir, exist_ok=True)
-
-        tmp = tempfile.NamedTemporaryFile(dir=downloads_dir, suffix=ext, delete=False)
-        try:
-            tmp.write(data)
-            tmp.flush()
-            tmp_path = tmp.name
-        finally:
-            tmp.close()
-
-        return {
-            "ok": True,
-            "path": tmp_path,
-            "content_type": content_type,
-            "size": len(data),
-        }
+        result = _download_file(url, auth_header, base_url, config_dir)
+        return {"ok": True, **result}
 
     except AuthError as e:
         return {"ok": False, "error": str(e)}

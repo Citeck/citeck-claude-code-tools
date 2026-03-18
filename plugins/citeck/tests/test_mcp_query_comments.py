@@ -73,22 +73,24 @@ class TestExtractImageUrls:
 
     def test_single_absolute_img(self):
         html = '<img src="https://host/img.png">'
-        assert _extract_image_urls(html) == ["https://host/img.png"]
+        result = _extract_image_urls(html)
+        assert result == [{"src": "https://host/img.png", "url": "https://host/img.png"}]
 
     def test_relative_img_with_base_url(self):
         html = '<img src="/gateway/api/content?ref=abc">'
         result = _extract_image_urls(html, base_url="https://citeck.example.com")
-        assert result == ["https://citeck.example.com/gateway/api/content?ref=abc"]
+        assert result == [{"src": "/gateway/api/content?ref=abc", "url": "https://citeck.example.com/gateway/api/content?ref=abc"}]
 
     def test_relative_img_without_base_url(self):
         html = '<img src="/gateway/img.png">'
         result = _extract_image_urls(html)
-        assert result == ["/gateway/img.png"]
+        assert result == [{"src": "/gateway/img.png", "url": "/gateway/img.png"}]
 
     def test_deduplicates(self):
         html = '<img src="/img.png"><img src="/img.png">'
         result = _extract_image_urls(html, base_url="https://host")
-        assert result == ["https://host/img.png"]
+        assert len(result) == 1
+        assert result[0] == {"src": "/img.png", "url": "https://host/img.png"}
 
     def test_empty_html(self):
         assert _extract_image_urls("") == []
@@ -99,7 +101,9 @@ class TestExtractImageUrls:
     def test_multiple_images(self):
         html = '<img src="/a.png"><p>text</p><img src="/b.jpg">'
         result = _extract_image_urls(html, base_url="https://host")
-        assert result == ["https://host/a.png", "https://host/b.jpg"]
+        assert len(result) == 2
+        assert result[0] == {"src": "/a.png", "url": "https://host/a.png"}
+        assert result[1] == {"src": "/b.jpg", "url": "https://host/b.jpg"}
 
 
 # -- Unit tests for _format_comments --
@@ -243,6 +247,7 @@ async def test_query_comments_basic(client: Client):
     assert comment["text"] == "Fix this ASAP"
     assert comment["textHtml"] == "<p>Fix this <b>ASAP</b></p>"
     assert comment["imageUrls"] == []
+    assert comment["images"] == []
     assert comment["creator"]["username"] == "dev1"
 
     call_kwargs = mock_query.call_args[1]
@@ -255,7 +260,7 @@ async def test_query_comments_basic(client: Client):
 
 @pytest.mark.anyio
 async def test_query_comments_with_images(client: Client):
-    """Comments with images return resolved imageUrls."""
+    """Comments with images auto-download, return local paths, and replace URLs in textHtml."""
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
 
@@ -273,8 +278,12 @@ async def test_query_comments_with_images(client: Client):
         "hasMore": False,
     }
 
+    mock_dl = {"path": "/Users/test/.citeck/downloads/img1.png", "content_type": "image/png", "size": 100}
+
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_response), \
-         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
+         patch("servers.citeck_mcp.get_auth_header", return_value="Basic dGVzdA=="), \
+         patch("servers.citeck_mcp._download_file", return_value=mock_dl) as mock_download:
         result = await client.call_tool("query_comments", {
             "record_ref": "emodel/ept-issue@COREDEV-1",
         })
@@ -284,6 +293,49 @@ async def test_query_comments_with_images(client: Client):
     comment = data["comments"][0]
     assert len(comment["imageUrls"]) == 1
     assert comment["imageUrls"][0].startswith("http://localhost/")
+    assert len(comment["images"]) == 1
+    assert comment["images"][0]["path"] == "/Users/test/.citeck/downloads/img1.png"
+    assert comment["images"][0]["content_type"] == "image/png"
+    # textHtml should have local path instead of original src
+    assert "/Users/test/.citeck/downloads/img1.png" in comment["textHtml"]
+    assert "/gateway/content?ref=att%40abc" not in comment["textHtml"]
+    mock_download.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_query_comments_image_download_failure_graceful(client: Client):
+    """Failed image download doesn't break comments."""
+    config_dir = tempfile.mkdtemp()
+    _setup_credentials(config_dir)
+
+    mock_response = {
+        "records": [
+            {
+                "id": "emodel/comment@uuid1",
+                "attributes": {
+                    "text": '<p><img src="/gateway/content?ref=missing"></p>',
+                    "created": "2026-03-18T10:00:00Z",
+                },
+            }
+        ],
+        "totalCount": 1,
+        "hasMore": False,
+    }
+
+    with patch("servers.citeck_mcp.lib_records_query", return_value=mock_response), \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
+         patch("servers.citeck_mcp.get_auth_header", return_value="Basic dGVzdA=="), \
+         patch("servers.citeck_mcp._download_file", side_effect=Exception("network error")):
+        result = await client.call_tool("query_comments", {
+            "record_ref": "emodel/ept-issue@COREDEV-1",
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    comment = data["comments"][0]
+    assert len(comment["images"]) == 1
+    assert comment["images"][0]["path"] is None
+    assert "error" in comment["images"][0]
 
 
 @pytest.mark.anyio
