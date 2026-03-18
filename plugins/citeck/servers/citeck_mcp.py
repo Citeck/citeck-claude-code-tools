@@ -1,7 +1,9 @@
 """Citeck ECOS MCP server for Claude Code."""
 
 import os
+import re
 import sys
+from html.parser import HTMLParser
 
 from fastmcp import FastMCP
 
@@ -29,7 +31,12 @@ _projects_cache: dict[tuple[str, str], list[dict]] = {}
 
 mcp = FastMCP(
     "citeck",
-    instructions="Citeck ECOS platform tools — query records, manage tracker issues.",
+    instructions=(
+        "Citeck ECOS platform tools — query records, manage tracker issues.\n\n"
+        "When investigating a specific issue (e.g. by ID like COREDEV-3703), "
+        "use query_comments to fetch its comments — they often contain important "
+        "context, discussion, and decisions about the issue."
+    ),
 )
 
 
@@ -1031,6 +1038,145 @@ def query_releases(
         ascending: Sort ascending by creation date (default: false).
     """
     return _query_metadata("releases", project=project, status=status, limit=limit, ascending=ascending)
+
+
+# --- HTML stripping utility ---
+
+
+class _HTMLStripper(HTMLParser):
+    """Minimal HTML-to-text converter using stdlib only."""
+
+    def __init__(self):
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._parts).strip()
+
+
+def _strip_html(text: str | None) -> str:
+    """Strip HTML tags from a string and collapse whitespace."""
+    if not text:
+        return ""
+    stripper = _HTMLStripper()
+    stripper.feed(text)
+    return re.sub(r"\s+", " ", stripper.get_text()).strip()
+
+
+# --- Comments ---
+
+_COMMENT_SOURCE_ID = "emodel/comment"
+
+_COMMENT_ATTRIBUTES = {
+    "text": "text",
+    "created": "_created",
+    "modified": "_modified",
+    "creator": "_creator{authorityName:?localId,userName:?localId,displayName:?disp,firstName,lastName,avatarUrl:avatar.url}",
+    "modifier": "_modifier{authorityName:?localId,userName:?localId,displayName:?disp,firstName,lastName}",
+    "canEdit": "permissions._has.Write?bool",
+    "edited": "edited!false",
+    "tags": "tags[]{type,name}",
+}
+
+
+def _format_comments(records: list[dict]) -> list[dict]:
+    """Extract and clean comment attributes from raw records."""
+    comments = []
+    for rec in records:
+        attrs = rec.get("attributes", {})
+
+        creator_raw = attrs.get("creator")
+        if isinstance(creator_raw, dict):
+            creator = {
+                "username": creator_raw.get("userName") or creator_raw.get("authorityName") or "",
+                "displayName": creator_raw.get("displayName") or "",
+                "firstName": creator_raw.get("firstName") or "",
+                "lastName": creator_raw.get("lastName") or "",
+                "avatarUrl": creator_raw.get("avatarUrl") or "",
+            }
+        else:
+            creator = {"displayName": str(creator_raw or "")}
+
+        modifier_raw = attrs.get("modifier")
+        if isinstance(modifier_raw, dict):
+            modifier = {
+                "username": modifier_raw.get("userName") or modifier_raw.get("authorityName") or "",
+                "displayName": modifier_raw.get("displayName") or "",
+                "firstName": modifier_raw.get("firstName") or "",
+                "lastName": modifier_raw.get("lastName") or "",
+            }
+        else:
+            modifier = {"displayName": str(modifier_raw or "")}
+
+        raw_text = attrs.get("text") or ""
+        comments.append({
+            "id": rec.get("id", ""),
+            "text": _strip_html(raw_text),
+            "textHtml": raw_text,
+            "created": attrs.get("created") or "",
+            "modified": attrs.get("modified") or "",
+            "creator": creator,
+            "modifier": modifier,
+            "canEdit": attrs.get("canEdit", False),
+            "edited": attrs.get("edited", False),
+            "tags": attrs.get("tags") or [],
+        })
+    return comments
+
+
+@mcp.tool
+def query_comments(
+    record_ref: str,
+    limit: int = 50,
+    skip_count: int = 0,
+) -> dict:
+    """Fetch comments for a Citeck ECOS record.
+
+    Comments are sorted newest first. The 'text' field is plain text
+    (HTML stripped); 'textHtml' preserves the original HTML.
+
+    Args:
+        record_ref: Full record reference (e.g. "emodel/ept-issue@COREDEV-3703").
+        limit: Max comments to return (default: 50).
+        skip_count: Number of comments to skip for pagination (default: 0).
+    """
+    config_dir = _get_config_dir()
+
+    if not record_ref or not record_ref.strip():
+        return {"ok": False, "error": "record_ref must not be empty."}
+
+    try:
+        response = lib_records_query(
+            source_id=_COMMENT_SOURCE_ID,
+            query={"t": "eq", "a": "record", "v": record_ref},
+            attributes=_COMMENT_ATTRIBUTES,
+            language="predicate",
+            page={"skipCount": skip_count, "maxItems": limit},
+            sort_by=[{"attribute": "_created", "ascending": False}],
+            config_dir=config_dir,
+        )
+
+        records = response.get("records", [])
+        comments = _format_comments(records)
+
+        result: dict = {
+            "ok": True,
+            "count": len(comments),
+            "comments": comments,
+        }
+        if "totalCount" in response:
+            result["totalCount"] = response["totalCount"]
+        if "hasMore" in response:
+            result["hasMore"] = response["hasMore"]
+        return result
+
+    except RecordsApiError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
 
 
 if __name__ == "__main__":

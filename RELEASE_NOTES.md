@@ -1,5 +1,16 @@
 # Релизы
 
+## v3.1.0 (2026-03-18)
+
+### 🆕 Новое
+- Инструмент `query_comments` — загрузка комментариев для любой записи по `record_ref` с пагинацией, очисткой HTML в plain text и сохранением оригинального HTML
+- MCP-сервер подсказывает Claude подтягивать комментарии при исследовании конкретных задач
+
+### Тесты
+- 251 юнит-тест (+22), включая покрытие нового инструмента и утилиты очистки HTML
+
+---
+
 ## v3.0.0 (2026-03-17)
 
 Мажорный релиз — переход на MCP-сервер как единственный транспорт для всех инструментов Citeck.
@@ -7,7 +18,7 @@
 ### 🎉 MCP-сервер
 - Все инструменты Citeck теперь работают через единый FastMCP-сервер (`servers/citeck_mcp.py`) вместо отдельных Python-скриптов
 - Персистентная сессия — нет холодного старта при каждом вызове
-- 13 инструментов: `ping`, `test_connection`, `records_query`, `records_mutate`, `list_projects`, `set_project_default`, `search_issues`, `create_issue`, `update_issue`, `query_sprints`, `query_components`, `query_tags`, `query_releases`
+- 13 инструментов: `ping`, `test_connection`, `records_query`, `records_mutate`, `list_projects`, `set_project_default`, `search_issues`, `create_issue`, `update_issue`, `query_sprints`, `query_components`, `query_tags`, `query_releases` (в v3.1.0 добавлен `query_comments`)
 - Кэширование списка проектов в памяти
 
 ### 🆕 Новое
