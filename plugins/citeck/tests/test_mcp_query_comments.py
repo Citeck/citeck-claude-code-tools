@@ -11,7 +11,7 @@ from fastmcp import Client
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from servers.citeck_mcp import mcp, _strip_html, _format_comments
+from servers.citeck_mcp import mcp, _strip_html, _format_comments, _extract_image_urls
 from lib.config import save_credentials
 from lib.records_api import RecordsApiError
 
@@ -64,6 +64,44 @@ class TestStripHtml:
         assert "Item 2" in result
 
 
+# -- Unit tests for _extract_image_urls --
+
+
+class TestExtractImageUrls:
+    def test_no_images(self):
+        assert _extract_image_urls("<p>Hello world</p>") == []
+
+    def test_single_absolute_img(self):
+        html = '<img src="https://host/img.png">'
+        assert _extract_image_urls(html) == ["https://host/img.png"]
+
+    def test_relative_img_with_base_url(self):
+        html = '<img src="/gateway/api/content?ref=abc">'
+        result = _extract_image_urls(html, base_url="https://citeck.example.com")
+        assert result == ["https://citeck.example.com/gateway/api/content?ref=abc"]
+
+    def test_relative_img_without_base_url(self):
+        html = '<img src="/gateway/img.png">'
+        result = _extract_image_urls(html)
+        assert result == ["/gateway/img.png"]
+
+    def test_deduplicates(self):
+        html = '<img src="/img.png"><img src="/img.png">'
+        result = _extract_image_urls(html, base_url="https://host")
+        assert result == ["https://host/img.png"]
+
+    def test_empty_html(self):
+        assert _extract_image_urls("") == []
+
+    def test_none_html(self):
+        assert _extract_image_urls(None) == []
+
+    def test_multiple_images(self):
+        html = '<img src="/a.png"><p>text</p><img src="/b.jpg">'
+        result = _extract_image_urls(html, base_url="https://host")
+        assert result == ["https://host/a.png", "https://host/b.jpg"]
+
+
 # -- Unit tests for _format_comments --
 
 
@@ -103,6 +141,7 @@ class TestFormatComments:
         assert c["id"] == "emodel/comment@uuid1"
         assert c["text"] == "Hello world"
         assert c["textHtml"] == "<p>Hello <b>world</b></p>"
+        assert c["imageUrls"] == []
         assert c["creator"]["username"] == "admin"
         assert c["creator"]["displayName"] == "Admin User"
         assert c["creator"]["avatarUrl"] == "/avatar.png"
@@ -115,11 +154,32 @@ class TestFormatComments:
         result = _format_comments(raw)
         assert result[0]["text"] == ""
         assert result[0]["textHtml"] == ""
+        assert result[0]["imageUrls"] == []
 
     def test_scalar_creator(self):
         raw = [{"id": "emodel/comment@uuid3", "attributes": {"creator": "admin"}}]
         result = _format_comments(raw)
         assert result[0]["creator"]["displayName"] == "admin"
+
+    def test_image_urls_extracted(self):
+        raw = [{
+            "id": "emodel/comment@uuid4",
+            "attributes": {
+                "text": '<p>See: <img src="/gateway/content?ref=abc"></p>',
+            },
+        }]
+        result = _format_comments(raw, base_url="http://localhost")
+        assert result[0]["imageUrls"] == ["http://localhost/gateway/content?ref=abc"]
+
+    def test_no_base_url_returns_raw_src(self):
+        raw = [{
+            "id": "emodel/comment@uuid5",
+            "attributes": {
+                "text": '<img src="/img.png">',
+            },
+        }]
+        result = _format_comments(raw)
+        assert result[0]["imageUrls"] == ["/img.png"]
 
 
 # -- MCP tool tests --
@@ -182,6 +242,7 @@ async def test_query_comments_basic(client: Client):
     comment = data["comments"][0]
     assert comment["text"] == "Fix this ASAP"
     assert comment["textHtml"] == "<p>Fix this <b>ASAP</b></p>"
+    assert comment["imageUrls"] == []
     assert comment["creator"]["username"] == "dev1"
 
     call_kwargs = mock_query.call_args[1]
@@ -190,6 +251,39 @@ async def test_query_comments_basic(client: Client):
     assert call_kwargs["query"] == {"t": "eq", "a": "record", "v": "emodel/ept-issue@COREDEV-3703"}
     assert call_kwargs["sort_by"] == [{"attribute": "_created", "ascending": False}]
     assert call_kwargs["page"] == {"skipCount": 0, "maxItems": 50}
+
+
+@pytest.mark.anyio
+async def test_query_comments_with_images(client: Client):
+    """Comments with images return resolved imageUrls."""
+    config_dir = tempfile.mkdtemp()
+    _setup_credentials(config_dir)
+
+    mock_response = {
+        "records": [
+            {
+                "id": "emodel/comment@uuid1",
+                "attributes": {
+                    "text": '<p>Bug: <img src="/gateway/content?ref=att%40abc&amp;att=content"></p>',
+                    "created": "2026-03-18T10:00:00Z",
+                },
+            }
+        ],
+        "totalCount": 1,
+        "hasMore": False,
+    }
+
+    with patch("servers.citeck_mcp.lib_records_query", return_value=mock_response), \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("query_comments", {
+            "record_ref": "emodel/ept-issue@COREDEV-1",
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    comment = data["comments"][0]
+    assert len(comment["imageUrls"]) == 1
+    assert comment["imageUrls"][0].startswith("http://localhost/")
 
 
 @pytest.mark.anyio

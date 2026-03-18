@@ -1,8 +1,13 @@
 """Citeck ECOS MCP server for Claude Code."""
 
+import mimetypes
 import os
 import re
 import sys
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from html.parser import HTMLParser
 
 from fastmcp import FastMCP
@@ -10,7 +15,7 @@ from fastmcp import FastMCP
 # Add parent directory to path so lib/ is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from lib.auth import AuthError, validate_connection, get_username
+from lib.auth import AuthError, get_auth_header, validate_connection, get_username
 from lib.config import (
     get_credentials, get_active_profile,
     get_projects, get_default_project, set_default_project,
@@ -1044,17 +1049,27 @@ def query_releases(
 
 
 class _HTMLStripper(HTMLParser):
-    """Minimal HTML-to-text converter using stdlib only."""
+    """Minimal HTML-to-text converter with image URL extraction."""
 
     def __init__(self):
         super().__init__()
         self._parts: list[str] = []
+        self._srcs: list[str] = []
 
     def handle_data(self, data: str) -> None:
         self._parts.append(data)
 
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag == "img":
+            for name, value in attrs:
+                if name == "src" and value:
+                    self._srcs.append(value)
+
     def get_text(self) -> str:
         return " ".join(self._parts).strip()
+
+    def get_image_srcs(self) -> list[str]:
+        return list(self._srcs)
 
 
 def _strip_html(text: str | None) -> str:
@@ -1064,6 +1079,22 @@ def _strip_html(text: str | None) -> str:
     stripper = _HTMLStripper()
     stripper.feed(text)
     return re.sub(r"\s+", " ", stripper.get_text()).strip()
+
+
+def _extract_image_urls(html: str | None, base_url: str | None = None) -> list[str]:
+    """Extract and resolve image URLs from an HTML string."""
+    if not html:
+        return []
+    stripper = _HTMLStripper()
+    stripper.feed(html)
+    srcs = stripper.get_image_srcs()
+    resolved = []
+    for src in srcs:
+        if base_url:
+            resolved.append(urllib.parse.urljoin(base_url.rstrip("/") + "/", src))
+        else:
+            resolved.append(src)
+    return list(dict.fromkeys(resolved))
 
 
 # --- Comments ---
@@ -1082,7 +1113,7 @@ _COMMENT_ATTRIBUTES = {
 }
 
 
-def _format_comments(records: list[dict]) -> list[dict]:
+def _format_comments(records: list[dict], base_url: str | None = None) -> list[dict]:
     """Extract and clean comment attributes from raw records."""
     comments = []
     for rec in records:
@@ -1112,10 +1143,12 @@ def _format_comments(records: list[dict]) -> list[dict]:
             modifier = {"displayName": str(modifier_raw or "")}
 
         raw_text = attrs.get("text") or ""
+        image_urls = _extract_image_urls(raw_text, base_url)
         comments.append({
             "id": rec.get("id", ""),
             "text": _strip_html(raw_text),
             "textHtml": raw_text,
+            "imageUrls": image_urls,
             "created": attrs.get("created") or "",
             "modified": attrs.get("modified") or "",
             "creator": creator,
@@ -1149,6 +1182,8 @@ def query_comments(
         return {"ok": False, "error": "record_ref must not be empty."}
 
     try:
+        profile = get_active_profile(config_dir)
+
         response = lib_records_query(
             source_id=_COMMENT_SOURCE_ID,
             query={"t": "eq", "a": "record", "v": record_ref},
@@ -1156,11 +1191,16 @@ def query_comments(
             language="predicate",
             page={"skipCount": skip_count, "maxItems": limit},
             sort_by=[{"attribute": "_created", "ascending": False}],
+            profile=profile,
             config_dir=config_dir,
         )
 
         records = response.get("records", [])
-        comments = _format_comments(records)
+        base_url = None
+        creds = get_credentials(profile, config_dir)
+        if creds:
+            base_url = creds["url"].rstrip("/")
+        comments = _format_comments(records, base_url=base_url)
 
         result: dict = {
             "ok": True,
@@ -1175,6 +1215,80 @@ def query_comments(
 
     except RecordsApiError as e:
         return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+_EXT_OVERRIDES = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif"}
+
+
+@mcp.tool
+def download_attachment(
+    url: str,
+) -> dict:
+    """Download a file from Citeck via authenticated session and return its local path.
+
+    Saves the file to a temporary location. Use the Read tool with the returned
+    path to view the file contents. Supports images, PDFs, and other binary files.
+
+    Args:
+        url: Attachment URL — absolute (https://...) or relative (/gateway/...).
+             Relative URLs are resolved against the configured Citeck base URL.
+    """
+    config_dir = _get_config_dir()
+
+    if not url or not url.strip():
+        return {"ok": False, "error": "url must not be empty."}
+
+    try:
+        profile = get_active_profile(config_dir)
+        creds = get_credentials(profile, config_dir)
+        if creds is None:
+            return {
+                "ok": False,
+                "error": f"No credentials found for profile '{profile}'. "
+                         "Run 'citeck:citeck-auth' to configure.",
+            }
+
+        base_url = creds["url"].rstrip("/")
+        abs_url = urllib.parse.urljoin(base_url + "/", url) if not url.startswith("http") else url
+
+        auth_header = get_auth_header(profile=profile, config_dir=config_dir)
+
+        req = urllib.request.Request(
+            abs_url,
+            headers={"Authorization": auth_header},
+            method="GET",
+        )
+
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            content_type = resp.headers.get("Content-Type", "application/octet-stream").split(";")[0].strip()
+            ext = _EXT_OVERRIDES.get(content_type, mimetypes.guess_extension(content_type) or "")
+            data = resp.read()
+
+        tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+        try:
+            tmp.write(data)
+            tmp.flush()
+            tmp_path = tmp.name
+        finally:
+            tmp.close()
+
+        return {
+            "ok": True,
+            "path": tmp_path,
+            "content_type": content_type,
+            "size": len(data),
+        }
+
+    except AuthError as e:
+        return {"ok": False, "error": str(e)}
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "error": f"HTTP {e.code} {e.reason}"}
+    except (urllib.error.URLError, OSError) as e:
+        return {"ok": False, "error": f"Connection error: {e}"}
     except Exception as e:
         return {"ok": False, "error": f"Unexpected error: {e}"}
 
