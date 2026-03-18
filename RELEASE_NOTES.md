@@ -1,5 +1,31 @@
 # Релизы
 
+## v3.0.0 (2026-03-17)
+
+Мажорный релиз — переход на MCP-сервер как единственный транспорт для всех инструментов Citeck.
+
+### 🎉 MCP-сервер
+- Все инструменты Citeck теперь работают через единый FastMCP-сервер (`servers/citeck_mcp.py`) вместо отдельных Python-скриптов
+- Персистентная сессия — нет холодного старта при каждом вызове
+- 13 инструментов: `ping`, `test_connection`, `records_query`, `records_mutate`, `list_projects`, `set_project_default`, `search_issues`, `create_issue`, `update_issue`, `query_sprints`, `query_components`, `query_tags`, `query_releases`
+- Кэширование списка проектов в памяти
+
+### 🆕 Новое
+- Скилл `citeck-changes-to-task` переведён на MCP-инструменты вместо скриптов
+
+### ✨ Улучшения
+- Протокол предпросмотра (preview) вынесен в docstring инструментов `create_issue` и `update_issue`
+- Документация по полю `implementer` добавлена в docstring `records_query`
+
+### 🗑️ Удалено
+- Скилловые скрипты `citeck-records`, `citeck-records-query`, `citeck-tracker` — заменены MCP-инструментами
+- Агенты `citeck-explorer` и `citeck-manager` — не могли вызывать MCP-инструменты из-за ограничений Claude Code
+
+### Тесты
+- 229 юнит-тестов, полное покрытие всех MCP-инструментов
+
+---
+
 ## v2.1.0 (2026-03-10)
 
 ### ✨ Улучшения
