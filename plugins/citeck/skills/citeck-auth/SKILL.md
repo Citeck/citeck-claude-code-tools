@@ -89,9 +89,34 @@ Lists available profiles when called with `--list`.
 python3 ${CLAUDE_SKILL_DIR}/scripts/switch_profile.py --list
 ```
 
+Show non-sensitive settings (url, auth_method, client_id) of a specific profile:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/switch_profile.py --detail <name>
+```
+
 ## Setup Flow
 
-When a user needs to configure Citeck ECOS access:
+When a user needs to configure or re-authenticate Citeck ECOS access:
+
+### Step 1: Check for existing profiles
+
+Run `switch_profile.py --list` to check if profiles already exist.
+
+### Step 2a: Existing profiles found (most common — re-authentication)
+
+1. Show the user their profiles and which one is active
+2. Run `switch_profile.py --detail <active_profile>` to get the active profile's settings (url, auth_method, client_id)
+3. Ask the user what they want:
+   - **Re-authenticate the current profile** (default) — just refresh tokens using saved settings
+   - **Switch to a different profile** — run `switch_profile.py --profile <name>`
+   - **Set up a new profile** — go to Step 2b
+4. **Re-authenticate PKCE profile:** run `setup_pkce.py` with url and client_id from the existing profile — do NOT ask the user for URL or auth method again
+5. **Re-authenticate password profile:** ask only for the password (it may have changed), run `setup.py` with url and username from the existing profile
+6. Run `test_connection.py` to verify
+7. Report the result
+
+### Step 2b: No profiles exist (first-time setup)
 
 1. Ask for the Citeck ECOS URL (e.g., http://localhost, https://citeck.example.com)
 2. Ask which auth method they prefer:

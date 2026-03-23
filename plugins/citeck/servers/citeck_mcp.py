@@ -524,6 +524,7 @@ def _build_create_record(
     description: str = "",
     priority: str = "300_medium",
     assignee: str | None = None,
+    reporter: str | None = None,
     sprint: str | None = None,
     components: list[str] | None = None,
     tags: list[str] | None = None,
@@ -538,6 +539,11 @@ def _build_create_record(
         "description?str": description or "",
         "priority?str": priority,
     }
+
+    if reporter:
+        if not reporter.startswith("emodel/person@"):
+            reporter = f"emodel/person@{reporter}"
+        attributes["reporter?str"] = reporter
 
     if assignee:
         if not assignee.startswith("emodel/person@"):
@@ -591,15 +597,17 @@ def create_issue(
 
     Args:
         type: Issue type: task, story, bug, epic.
-        summary: Issue summary/title (required).
+        summary: Issue summary/title in English, imperative mood (required).
         project: Project key (e.g. "COREDEV"). Uses default project if not set.
-        description: Issue description.
+        description: Issue description in HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
         priority: Priority (default: "300_medium"). Options: 100_critical, 200_high, 300_medium, 400_low.
         assignee: Assignee username. Use "me" to auto-resolve to current user.
         sprint: Sprint reference (UUID or full ref).
         components: List of component references.
         tags: List of tag references.
         preview: If true (default), returns preview without creating. Set false to actually create.
+
+    Reporter is auto-set to the current user.
     """
     config_dir = _get_config_dir()
 
@@ -630,6 +638,12 @@ def create_issue(
         if not ok:
             return {"ok": False, "error": resolved_assignee}
 
+        # Resolve reporter (current user)
+        try:
+            reporter = get_username(profile=profile, config_dir=config_dir)
+        except Exception:
+            reporter = None
+
         # Resolve project info
         project_ref, workspace_key = _resolve_project_info(proj_key, profile=profile, config_dir=config_dir)
 
@@ -642,6 +656,7 @@ def create_issue(
             description=description,
             priority=priority,
             assignee=resolved_assignee,
+            reporter=reporter,
             sprint=sprint,
             components=components,
             tags=tags,

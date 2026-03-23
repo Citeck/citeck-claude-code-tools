@@ -14,6 +14,8 @@ def main():
     parser = argparse.ArgumentParser(description="Switch or list Citeck ECOS profiles")
     parser.add_argument("--profile", default=None, help="Profile to switch to")
     parser.add_argument("--list", action="store_true", help="List available profiles")
+    parser.add_argument("--detail", default=None, metavar="PROFILE",
+                        help="Show non-sensitive settings of a profile")
     args = parser.parse_args()
 
     config_dir = os.environ.get("CITECK_CONFIG_DIR")
@@ -24,6 +26,20 @@ def main():
         result = {
             "profiles": profiles,
             "active": active,
+        }
+        print(json.dumps(result, indent=2))
+        return
+
+    if args.detail:
+        creds = config.get_credentials(args.detail, config_dir)
+        if creds is None:
+            print(json.dumps({"status": "error", "error": f"Profile '{args.detail}' not found"}), file=sys.stderr)
+            sys.exit(1)
+        result = {
+            "profile": args.detail,
+            "url": creds.get("url"),
+            "auth_method": creds.get("auth_method"),
+            "client_id": creds.get("client_id"),
         }
         print(json.dumps(result, indent=2))
         return

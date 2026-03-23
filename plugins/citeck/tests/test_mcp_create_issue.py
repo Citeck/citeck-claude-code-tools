@@ -328,6 +328,64 @@ async def test_create_issue_assignee_me(client: Client):
     assert data["ok"] is True
     attrs = data["record"]["attributes"]
     assert attrs["implementer?str"] == "emodel/person@current_user"
+    assert attrs["reporter?str"] == "emodel/person@current_user"
+
+
+async def test_create_issue_reporter_auto_set(client: Client):
+    """create_issue auto-sets reporter to current user."""
+    config_dir = tempfile.mkdtemp()
+    _setup_with_default_project(config_dir)
+
+    mock_query_response = {
+        "records": [{"attributes": {"id": "emodel/project@uuid"}}],
+    }
+    mock_load_response = {
+        "records": [{"attributes": {"?json": {"key": "COREDEV"}}}],
+    }
+
+    with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
+         patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
+         patch("servers.citeck_mcp.get_username", return_value="reporter_user"), \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("create_issue", {
+            "project": "COREDEV",
+            "type": "task",
+            "summary": "Task with reporter",
+            "preview": True,
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    attrs = data["record"]["attributes"]
+    assert attrs["reporter?str"] == "emodel/person@reporter_user"
+
+
+async def test_create_issue_reporter_not_set_on_failure(client: Client):
+    """create_issue omits reporter when username cannot be resolved."""
+    config_dir = tempfile.mkdtemp()
+    _setup_with_default_project(config_dir)
+
+    mock_query_response = {
+        "records": [{"attributes": {"id": "emodel/project@uuid"}}],
+    }
+    mock_load_response = {
+        "records": [{"attributes": {"?json": {"key": "COREDEV"}}}],
+    }
+
+    with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
+         patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
+         patch("servers.citeck_mcp.get_username", side_effect=Exception("no auth")), \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("create_issue", {
+            "project": "COREDEV",
+            "type": "task",
+            "summary": "Task without reporter",
+            "preview": True,
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    assert "reporter?str" not in data["record"]["attributes"]
 
 
 async def test_create_issue_assignee_me_failure(client: Client):
