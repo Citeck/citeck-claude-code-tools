@@ -1,7 +1,7 @@
 {
   "name": "citeck",
   "description": "MCP server and skills for Citeck platform development",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "author": {
     "name": "Citeck"
   },
