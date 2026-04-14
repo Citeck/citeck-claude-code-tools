@@ -23,6 +23,7 @@ EIS_JSON_PATH = "/eis.json"
 WELL_KNOWN_PATH_TEMPLATE = "/auth/realms/{realm}/.well-known/openid-configuration"
 # Fallback for local instances without eis.json discovery
 FALLBACK_TOKEN_PATH = "/ecos-idp/auth/realms/{realm}/protocol/openid-connect/token"
+LOCALHOST_IDP_PREFIX = "/ecos-idp"
 
 
 def _token_cache_path(profile, config_dir=None):
@@ -59,11 +60,20 @@ def _eis_id_to_base_url(eis_id):
     return "https://" + eis_id.rstrip("/")
 
 
+def _is_localhost(url):
+    """Check if URL points to localhost."""
+    stripped = url.rstrip("/")
+    return (stripped == "http://localhost"
+            or stripped.startswith("http://localhost:")
+            or stripped.startswith("http://127.0.0.1"))
+
+
 def discover_eis(base_url):
     """Fetch eis.json from the server.
 
     Returns dict with 'eis_id', 'realm', and 'is_oidc' keys.
-    Falls back to defaults if discovery fails.
+    For localhost with unconfigured eis.json, probes the local Keycloak
+    at /ecos-idp before falling back to non-OIDC.
     """
     url = base_url.rstrip("/") + EIS_JSON_PATH
     req = urllib.request.Request(url, method="GET")
@@ -72,35 +82,88 @@ def discover_eis(base_url):
             data = json.loads(resp.read().decode("utf-8"))
             eis_id = data.get("eisId", DEFAULT_EIS_ID)
             realm = data.get("realmId", DEFAULT_REALM)
-            return {
-                "eis_id": eis_id,
-                "realm": realm,
-                "is_oidc": eis_id != DEFAULT_EIS_ID,
-            }
+            if eis_id != DEFAULT_EIS_ID:
+                return {"eis_id": eis_id, "realm": realm, "is_oidc": True}
     except (urllib.error.URLError, urllib.error.HTTPError, OSError,
             json.JSONDecodeError, KeyError):
-        return {"eis_id": DEFAULT_EIS_ID, "realm": DEFAULT_REALM, "is_oidc": False}
+        eis_id = DEFAULT_EIS_ID
+        realm = DEFAULT_REALM
+
+    # eis.json returned placeholder values — probe local Keycloak for localhost
+    if _is_localhost(base_url):
+        probe_url = (base_url.rstrip("/") + LOCALHOST_IDP_PREFIX
+                     + WELL_KNOWN_PATH_TEMPLATE.format(realm=DEFAULT_REALM))
+        try:
+            probe_req = urllib.request.Request(probe_url, method="GET")
+            with urllib.request.urlopen(probe_req, timeout=5) as resp:
+                json.loads(resp.read().decode("utf-8"))
+                # Keycloak is reachable — treat as OIDC-capable
+                return {
+                    "eis_id": base_url.rstrip("/"),
+                    "realm": DEFAULT_REALM,
+                    "is_oidc": True,
+                }
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError,
+                json.JSONDecodeError, KeyError):
+            pass
+
+    return {"eis_id": DEFAULT_EIS_ID, "realm": DEFAULT_REALM, "is_oidc": False}
+
+
+def _fix_localhost_endpoint(endpoint, base_url):
+    """Fix Keycloak endpoint URLs for localhost behind reverse proxy.
+
+    Keycloak's well-known config returns internal paths (e.g. /realms/...)
+    that may not be routed by the nginx proxy. Replace with the /ecos-idp/auth
+    proxied path.
+    """
+    from urllib.parse import urlparse
+    parsed = urlparse(endpoint)
+    path = parsed.path
+    # If path doesn't already include /ecos-idp, add the prefix
+    if not path.startswith(LOCALHOST_IDP_PREFIX):
+        new_path = LOCALHOST_IDP_PREFIX + "/auth" + path
+        return base_url.rstrip("/") + new_path
+    return endpoint
 
 
 def discover_oidc_endpoints(eis_id, realm):
     """Fetch OpenID Connect well-known configuration.
 
+    For localhost eis_id, tries /ecos-idp prefix first (local Keycloak behind proxy)
+    and fixes returned endpoint URLs to use the proxied path.
     Returns dict with 'token_endpoint' and 'authorization_endpoint',
     or None if discovery fails.
     """
     keycloak_url = _eis_id_to_base_url(eis_id)
-    well_known_url = keycloak_url + WELL_KNOWN_PATH_TEMPLATE.format(realm=realm)
-    req = urllib.request.Request(well_known_url, method="GET")
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return {
-                "token_endpoint": data["token_endpoint"],
-                "authorization_endpoint": data["authorization_endpoint"],
-            }
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError,
-            json.JSONDecodeError, KeyError):
-        return None
+    is_local = _is_localhost(keycloak_url)
+
+    # For localhost, try /ecos-idp prefix first (Keycloak behind reverse proxy)
+    urls_to_try = []
+    if is_local:
+        urls_to_try.append(keycloak_url + LOCALHOST_IDP_PREFIX
+                           + WELL_KNOWN_PATH_TEMPLATE.format(realm=realm))
+    urls_to_try.append(keycloak_url + WELL_KNOWN_PATH_TEMPLATE.format(realm=realm))
+
+    for well_known_url in urls_to_try:
+        req = urllib.request.Request(well_known_url, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                token_ep = data["token_endpoint"]
+                auth_ep = data["authorization_endpoint"]
+                # Fix endpoints for localhost proxy
+                if is_local:
+                    token_ep = _fix_localhost_endpoint(token_ep, keycloak_url)
+                    auth_ep = _fix_localhost_endpoint(auth_ep, keycloak_url)
+                return {
+                    "token_endpoint": token_ep,
+                    "authorization_endpoint": auth_ep,
+                }
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError,
+                json.JSONDecodeError, KeyError):
+            continue
+    return None
 
 
 def _get_token_endpoint(creds):

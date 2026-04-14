@@ -1,5 +1,16 @@
 # Релизы
 
+## v3.3.1 (2026-04-14)
+
+### 🐛 Исправления
+- OIDC discovery на localhost с незаполненным `eis.json` — если Keycloak запущен за `/ecos-idp`, PKCE-авторизация теперь работает без ручной конфигурации
+- Endpoint'ы Keycloak на localhost переписываются с `/ecos-idp/auth` префиксом для корректной маршрутизации через nginx
+
+### Тесты
+- +25 тестов на localhost OIDC discovery, фикс endpoint'ов и проверку что production discovery не затронут
+
+---
+
 ## v3.3.0 (2026-04-14)
 
 ### ✨ Улучшения

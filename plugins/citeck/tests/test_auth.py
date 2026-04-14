@@ -26,10 +26,13 @@ from lib.auth import (
     _get_auth_endpoint,
     _basic_auth_header,
     _eis_id_to_base_url,
+    _is_localhost,
+    _fix_localhost_endpoint,
     _decode_jwt_payload,
     TOKEN_EXPIRY_MARGIN,
     DEFAULT_REALM,
     DEFAULT_EIS_ID,
+    LOCALHOST_IDP_PREFIX,
 )
 from lib.config import save_credentials
 
@@ -198,19 +201,28 @@ class TestDiscoverEis(unittest.TestCase):
         self.assertTrue(result["is_oidc"])
 
     @patch("lib.auth.urllib.request.urlopen")
-    def test_returns_not_oidc_for_eis_id_placeholder(self, mock_urlopen):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
+    def test_localhost_placeholder_probes_keycloak(self, mock_urlopen):
+        """Localhost with EIS_ID placeholder probes Keycloak and returns is_oidc=True."""
+        eis_resp = MagicMock()
+        eis_resp.read.return_value = json.dumps({
             "realmId": "ecos-app",
             "eisId": "EIS_ID",
         }).encode()
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = mock_resp
+        eis_resp.__enter__ = MagicMock(return_value=eis_resp)
+        eis_resp.__exit__ = MagicMock(return_value=False)
+
+        keycloak_resp = MagicMock()
+        keycloak_resp.read.return_value = json.dumps({
+            "issuer": "http://localhost/realms/ecos-app",
+        }).encode()
+        keycloak_resp.__enter__ = MagicMock(return_value=keycloak_resp)
+        keycloak_resp.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [eis_resp, keycloak_resp]
 
         result = discover_eis("http://localhost")
-        self.assertEqual(result["eis_id"], "EIS_ID")
-        self.assertFalse(result["is_oidc"])
+        self.assertEqual(result["eis_id"], "http://localhost")
+        self.assertTrue(result["is_oidc"])
 
     @patch("lib.auth.urllib.request.urlopen")
     def test_fallback_on_error(self, mock_urlopen):
@@ -650,6 +662,256 @@ class TestTokenExpiryMargin(unittest.TestCase):
         mock_request.return_value = _make_token_response(access_token="refreshed")
         header = get_auth_header(config_dir=self.tmpdir)
         self.assertEqual(header, "Bearer refreshed")
+
+
+def _mock_urlopen_response(data):
+    """Helper to create a mock urlopen response with context manager."""
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps(data).encode()
+    mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    return mock_resp
+
+
+class TestIsLocalhost(unittest.TestCase):
+    def test_plain_localhost(self):
+        self.assertTrue(_is_localhost("http://localhost"))
+
+    def test_localhost_with_trailing_slash(self):
+        self.assertTrue(_is_localhost("http://localhost/"))
+
+    def test_localhost_with_port(self):
+        self.assertTrue(_is_localhost("http://localhost:8080"))
+
+    def test_127_0_0_1(self):
+        self.assertTrue(_is_localhost("http://127.0.0.1"))
+
+    def test_127_0_0_1_with_port(self):
+        self.assertTrue(_is_localhost("http://127.0.0.1:8080"))
+
+    def test_https_domain_is_not_localhost(self):
+        self.assertFalse(_is_localhost("https://citeck.example.com"))
+
+    def test_http_remote_is_not_localhost(self):
+        self.assertFalse(_is_localhost("http://citeck.example.com"))
+
+    def test_https_localhost_is_not_matched(self):
+        # The function only checks http://localhost, not https
+        self.assertFalse(_is_localhost("https://localhost"))
+
+
+class TestFixLocalhostEndpoint(unittest.TestCase):
+    def test_adds_prefix_to_bare_realms_path(self):
+        endpoint = "http://localhost/realms/ecos-app/protocol/openid-connect/token"
+        result = _fix_localhost_endpoint(endpoint, "http://localhost")
+        self.assertEqual(
+            result,
+            "http://localhost/ecos-idp/auth/realms/ecos-app/protocol/openid-connect/token",
+        )
+
+    def test_preserves_already_prefixed_endpoint(self):
+        endpoint = "http://localhost/ecos-idp/auth/realms/ecos-app/protocol/openid-connect/token"
+        result = _fix_localhost_endpoint(endpoint, "http://localhost")
+        self.assertEqual(result, endpoint)
+
+    def test_strips_trailing_slash_from_base_url(self):
+        endpoint = "http://localhost/realms/ecos-app/protocol/openid-connect/auth"
+        result = _fix_localhost_endpoint(endpoint, "http://localhost/")
+        self.assertFalse(result.startswith("http://localhost//"))
+        self.assertIn("/ecos-idp/auth/realms/", result)
+
+
+class TestDiscoverEisLocalhostProbe(unittest.TestCase):
+    """Tests for localhost Keycloak probing when eis.json has placeholders."""
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_localhost_placeholder_probes_keycloak_success(self, mock_urlopen):
+        """Localhost + placeholder eisId → probe Keycloak → is_oidc=True."""
+        eis_resp = _mock_urlopen_response({"eisId": "EIS_ID", "realmId": "ecos-app"})
+        keycloak_resp = _mock_urlopen_response({"issuer": "http://localhost/realms/ecos-app"})
+
+        mock_urlopen.side_effect = [eis_resp, keycloak_resp]
+
+        result = discover_eis("http://localhost")
+        self.assertTrue(result["is_oidc"])
+        self.assertEqual(result["eis_id"], "http://localhost")
+        self.assertEqual(result["realm"], DEFAULT_REALM)
+        # Should have made 2 calls: eis.json + keycloak probe
+        self.assertEqual(mock_urlopen.call_count, 2)
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_localhost_placeholder_keycloak_unreachable(self, mock_urlopen):
+        """Localhost + placeholder eisId + Keycloak down → is_oidc=False."""
+        eis_resp = _mock_urlopen_response({"eisId": "EIS_ID", "realmId": "ecos-app"})
+        mock_urlopen.side_effect = [eis_resp, urllib.error.URLError("Connection refused")]
+
+        result = discover_eis("http://localhost")
+        self.assertFalse(result["is_oidc"])
+        self.assertEqual(result["eis_id"], DEFAULT_EIS_ID)
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_localhost_eis_error_probes_keycloak(self, mock_urlopen):
+        """Localhost + eis.json connection error → still probes Keycloak."""
+        keycloak_resp = _mock_urlopen_response({"issuer": "http://localhost/realms/ecos-app"})
+        mock_urlopen.side_effect = [
+            urllib.error.URLError("Connection refused"),  # eis.json fails
+            keycloak_resp,  # keycloak probe succeeds
+        ]
+
+        result = discover_eis("http://localhost")
+        self.assertTrue(result["is_oidc"])
+        self.assertEqual(result["eis_id"], "http://localhost")
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_remote_placeholder_no_keycloak_probe(self, mock_urlopen):
+        """Remote server + placeholder eisId → no Keycloak probe, is_oidc=False."""
+        eis_resp = _mock_urlopen_response({"eisId": "EIS_ID", "realmId": "ecos-app"})
+        mock_urlopen.return_value = eis_resp
+
+        result = discover_eis("https://citeck.example.com")
+        self.assertFalse(result["is_oidc"])
+        # Only 1 call: eis.json, no keycloak probe for remote
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+
+class TestDiscoverEisProductionUnaffected(unittest.TestCase):
+    """Verify that production (non-localhost) discovery is not affected by PR changes."""
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_production_valid_eis_returns_oidc(self, mock_urlopen):
+        """Production server with valid eisId → is_oidc=True, no probing."""
+        mock_urlopen.return_value = _mock_urlopen_response({
+            "eisId": "eis.prod.example.com",
+            "realmId": "Infrastructure",
+        })
+        result = discover_eis("https://citeck.prod.example.com")
+        self.assertTrue(result["is_oidc"])
+        self.assertEqual(result["eis_id"], "eis.prod.example.com")
+        self.assertEqual(result["realm"], "Infrastructure")
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_production_error_returns_not_oidc(self, mock_urlopen):
+        """Production server with eis.json error → is_oidc=False, no probing."""
+        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+        result = discover_eis("https://citeck.prod.example.com")
+        self.assertFalse(result["is_oidc"])
+        self.assertEqual(result["eis_id"], DEFAULT_EIS_ID)
+        # Only 1 call: eis.json, no keycloak probe for remote
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_production_placeholder_no_probe(self, mock_urlopen):
+        """Production server returning EIS_ID placeholder → no probe, is_oidc=False."""
+        mock_urlopen.return_value = _mock_urlopen_response({
+            "eisId": "EIS_ID",
+            "realmId": "ecos-app",
+        })
+        result = discover_eis("https://citeck.prod.example.com")
+        self.assertFalse(result["is_oidc"])
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+
+class TestDiscoverOidcEndpointsLocalhost(unittest.TestCase):
+    """Tests for localhost endpoint discovery with proxy path fixing."""
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_localhost_tries_idp_prefix_first(self, mock_urlopen):
+        """Localhost should try /ecos-idp well-known URL first."""
+        mock_urlopen.return_value = _mock_urlopen_response({
+            "token_endpoint": "http://localhost/realms/ecos-app/protocol/openid-connect/token",
+            "authorization_endpoint": "http://localhost/realms/ecos-app/protocol/openid-connect/auth",
+        })
+
+        result = discover_oidc_endpoints("http://localhost", DEFAULT_REALM)
+        self.assertIsNotNone(result)
+
+        # First call should be to the /ecos-idp prefixed URL
+        first_call_url = mock_urlopen.call_args_list[0][0][0].full_url
+        self.assertIn("/ecos-idp/auth/realms/", first_call_url)
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_localhost_fixes_endpoint_paths(self, mock_urlopen):
+        """Localhost endpoints should be rewritten with /ecos-idp/auth prefix."""
+        mock_urlopen.return_value = _mock_urlopen_response({
+            "token_endpoint": "http://localhost/realms/ecos-app/protocol/openid-connect/token",
+            "authorization_endpoint": "http://localhost/realms/ecos-app/protocol/openid-connect/auth",
+        })
+
+        result = discover_oidc_endpoints("http://localhost", DEFAULT_REALM)
+        self.assertEqual(
+            result["token_endpoint"],
+            "http://localhost/ecos-idp/auth/realms/ecos-app/protocol/openid-connect/token",
+        )
+        self.assertEqual(
+            result["authorization_endpoint"],
+            "http://localhost/ecos-idp/auth/realms/ecos-app/protocol/openid-connect/auth",
+        )
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_localhost_fallback_to_standard_url(self, mock_urlopen):
+        """If /ecos-idp URL fails, fall back to standard well-known URL."""
+        standard_resp = _mock_urlopen_response({
+            "token_endpoint": "http://localhost/realms/ecos-app/protocol/openid-connect/token",
+            "authorization_endpoint": "http://localhost/realms/ecos-app/protocol/openid-connect/auth",
+        })
+        mock_urlopen.side_effect = [
+            urllib.error.URLError("Connection refused"),  # /ecos-idp fails
+            standard_resp,  # standard URL works
+        ]
+
+        result = discover_oidc_endpoints("http://localhost", DEFAULT_REALM)
+        self.assertIsNotNone(result)
+        self.assertEqual(mock_urlopen.call_count, 2)
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_localhost_both_urls_fail(self, mock_urlopen):
+        """If both URLs fail for localhost, return None."""
+        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+        result = discover_oidc_endpoints("http://localhost", DEFAULT_REALM)
+        self.assertIsNone(result)
+        self.assertEqual(mock_urlopen.call_count, 2)
+
+
+class TestDiscoverOidcEndpointsProductionUnaffected(unittest.TestCase):
+    """Verify that production OIDC endpoint discovery is not affected."""
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_production_single_url_no_prefix(self, mock_urlopen):
+        """Production should try only the standard well-known URL, no /ecos-idp."""
+        mock_urlopen.return_value = _mock_urlopen_response({
+            "token_endpoint": "https://eis.example.com/auth/realms/Infra/protocol/openid-connect/token",
+            "authorization_endpoint": "https://eis.example.com/auth/realms/Infra/protocol/openid-connect/auth",
+        })
+
+        result = discover_oidc_endpoints("eis.example.com", "Infra")
+        self.assertIsNotNone(result)
+        # Only 1 call — no /ecos-idp prefix tried
+        self.assertEqual(mock_urlopen.call_count, 1)
+        call_url = mock_urlopen.call_args[0][0].full_url
+        self.assertNotIn("/ecos-idp/", call_url)
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_production_endpoints_not_rewritten(self, mock_urlopen):
+        """Production endpoints should be returned as-is, not rewritten."""
+        token_ep = "https://eis.example.com/auth/realms/Infra/protocol/openid-connect/token"
+        auth_ep = "https://eis.example.com/auth/realms/Infra/protocol/openid-connect/auth"
+        mock_urlopen.return_value = _mock_urlopen_response({
+            "token_endpoint": token_ep,
+            "authorization_endpoint": auth_ep,
+        })
+
+        result = discover_oidc_endpoints("eis.example.com", "Infra")
+        self.assertEqual(result["token_endpoint"], token_ep)
+        self.assertEqual(result["authorization_endpoint"], auth_ep)
+
+    @patch("lib.auth.urllib.request.urlopen")
+    def test_production_error_returns_none(self, mock_urlopen):
+        """Production error → None, only 1 attempt."""
+        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+        result = discover_oidc_endpoints("eis.example.com", "Infra")
+        self.assertIsNone(result)
+        self.assertEqual(mock_urlopen.call_count, 1)
 
 
 if __name__ == "__main__":
