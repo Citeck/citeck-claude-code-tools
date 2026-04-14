@@ -129,7 +129,8 @@ Rules:
 ### Guidelines for each section
 
 - **Критерии приёмки**: use *Given*/*When*/*Then* (italic) for key user scenarios. Each keyword (*Given*, *When*, *Then*) MUST be separated by a blank line for readability. Use bullet list items for smaller checks. For "Задача" type, checklist format is preferred over Given/When/Then.
-- **Риски и затронутые области**: list the modules, components, or areas of the system that are affected by the changes. Mention what could break or regress. If the changes are isolated and low-risk, say so explicitly.
+- **Что изменено**: OMIT this section if the description already covers what was done — avoid duplication.
+- **Риски и затронутые области**: OMIT this section if changes are isolated and obviously safe (dependency bump, config tweak, renaming, etc.). Include only when there is a real risk worth mentioning.
 - **Шаги воспроизведения** (bugs only): write concrete, reproducible steps. Use numbered list. Include expected vs actual results.
 
 ### Markdown formatting rules

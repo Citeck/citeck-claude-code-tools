@@ -183,13 +183,15 @@ def records_mutate(
 
     try:
         profile = get_active_profile(config_dir)
+        creds = get_credentials(profile, config_dir)
+        server_url = creds["url"].rstrip("/") if creds else None
         response = lib_records_mutate(
             records=records,
             version=version,
             profile=profile,
             config_dir=config_dir,
         )
-        return {"ok": True, **response}
+        return {"ok": True, "profile": profile, "server": server_url, **response}
     except RecordsApiError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
@@ -662,11 +664,17 @@ def create_issue(
             tags=tags,
         )
 
+        # Resolve server info for responses
+        creds = get_credentials(profile, config_dir)
+        server_url = creds["url"].rstrip("/") if creds else None
+
         # Preview mode
         if preview:
             return {
                 "ok": True,
                 "preview": True,
+                "profile": profile,
+                "server": server_url,
                 "record": record,
             }
 
@@ -684,11 +692,11 @@ def create_issue(
             response = {
                 "ok": True,
                 "id": created_id,
+                "profile": profile,
+                "server": server_url,
             }
-            creds = get_credentials(profile, config_dir)
-            if creds:
-                base_url = creds["url"].rstrip("/")
-                response["link"] = f"{base_url}/v2/dashboard?recordRef={created_id}"
+            if server_url:
+                response["link"] = f"{server_url}/v2/dashboard?recordRef={created_id}"
             return response
         else:
             return {"ok": True, "message": "Issue created."}
@@ -807,11 +815,17 @@ def update_issue(
             description=description,
         )
 
+        # Resolve server info for responses
+        creds = get_credentials(profile, config_dir)
+        server_url = creds["url"].rstrip("/") if creds else None
+
         # Preview mode
         if preview:
             return {
                 "ok": True,
                 "preview": True,
+                "profile": profile,
+                "server": server_url,
                 "record": record,
             }
 
@@ -829,11 +843,11 @@ def update_issue(
             response = {
                 "ok": True,
                 "id": updated_id,
+                "profile": profile,
+                "server": server_url,
             }
-            creds = get_credentials(profile, config_dir)
-            if creds:
-                base_url = creds["url"].rstrip("/")
-                response["link"] = f"{base_url}/v2/dashboard?recordRef={updated_id}"
+            if server_url:
+                response["link"] = f"{server_url}/v2/dashboard?recordRef={updated_id}"
             return response
         else:
             return {"ok": True, "message": "Issue updated."}

@@ -85,9 +85,9 @@ mcp__citeck__create_issue(
 )
 ```
 
-Show the FULL preview output to the user. Then ask via AskUserQuestion:
+Show the FULL preview output to the user. **Always show which server (profile) the issue will be created on** — the user must see where the action will happen. Then ask via AskUserQuestion:
 
-> **Create this issue in Citeck?**
+> **Create this issue in Citeck? (server: <profile name / URL>)**
 > Options: "Yes, create", "Edit parameters", "Cancel"
 
 **If "Edit parameters"**: ask what to change, re-run with `preview: true` and updated params, show the FULL preview again.

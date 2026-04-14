@@ -2,6 +2,39 @@
 
 Plugin marketplace for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to boost development on the [Citeck](https://www.citeck.ru/) platform.
 
+## What you get
+
+### Task creation from code changes
+
+Run `/citeck:citeck-changes-to-task` after finishing work on a branch — Claude analyzes the diff, determines the task type (Bug / Story / Task), generates a title in English and a structured description in Russian for QA, and creates an issue in Project Tracker. No need to switch context or fill in forms manually.
+
+### Task creation from description
+
+You don't need code changes at all. Describe what you need in natural language — Claude creates the issue with the right type, priority, components, and tags.
+
+### Working on tracker issues
+
+Ask Claude to take a look at any issue by ID (e.g. "look at COREDEV-3703"). Claude will:
+- Fetch the issue details and all comments
+- Automatically download and analyze screenshots and images from comments — visual context is read without asking
+- Understand the full picture: description, discussion, decisions, and attached screenshots
+- Suggest a fix, start implementation, or answer questions about the issue
+
+### Direct access to Records API
+
+The plugin exposes raw `records_query` and `records_mutate` tools — the same Records API that powers the platform. This means Claude can:
+- **Create test data** — populate the system with records for development and testing
+- **Query any data** — search and inspect records across the platform by predicates, load attributes, paginate
+- **Bulk mutations** — update multiple records at once
+- **Explore data models** — discover available attributes and types by querying with `?json`
+
+### Issue management
+
+Beyond creation, the plugin provides full issue lifecycle tools:
+- Search issues with filters (status, assignee, type, sprint, component, priority)
+- Update issues — change status, reassign, update priority or description
+- Browse sprints, components, tags, and releases for any project
+
 ## Installation
 
 ### Prerequisites
