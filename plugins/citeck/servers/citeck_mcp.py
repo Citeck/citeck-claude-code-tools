@@ -601,7 +601,7 @@ def create_issue(
         type: Issue type: task, story, bug, epic.
         summary: Issue summary/title in English, imperative mood (required).
         project: Project key (e.g. "COREDEV"). Uses default project if not set.
-        description: Issue description in HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
+        description: Issue description in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
         priority: Priority (default: "300_medium"). Options: 100_critical, 200_high, 300_medium, 400_low.
         assignee: Assignee username. Use "me" to auto-resolve to current user.
         sprint: Sprint reference (UUID or full ref).
@@ -790,8 +790,8 @@ def update_issue(
         status: New status (e.g. "in-progress", "done", "to-do").
         assignee: New assignee username. Use "me" to auto-resolve to current user.
         priority: New priority (e.g. "100_critical", "200_high", "300_medium", "400_low").
-        summary: New summary/title.
-        description: New description.
+        summary: New summary/title in English.
+        description: New description in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
         preview: If true (default), returns preview without updating. Set false to actually update.
     """
     config_dir = _get_config_dir()
