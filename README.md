@@ -35,6 +35,10 @@ Beyond creation, the plugin provides full issue lifecycle tools:
 - Update issues — change status, reassign, update priority or description
 - Browse sprints, components, tags, and releases for any project
 
+### Ask the Citeck documentation
+
+Run `/citeck:citeck-ask-docs <question>` to query the Citeck ECOS documentation via RAG. Claude searches `citeck-docs` semantically and synthesizes a grounded answer with citations — no need to open the docs site manually. Works for platform concepts, configuration, and APIs.
+
 ## Installation
 
 ### Prerequisites
@@ -101,6 +105,8 @@ The plugin provides an MCP server with the following tools, available as `mcp__c
 | `query_components` | List components for a project |
 | `query_tags` | List tags for a project |
 | `query_releases` | List releases for a project |
+| `search_docs` | Semantic search over Citeck documentation (citeck-docs RAG) |
+| `set_docs_profile` | Set the profile used for documentation search |
 
 ### Skills
 
@@ -109,6 +115,7 @@ The plugin provides an MCP server with the following tools, available as `mcp__c
 | [citeck-auth](plugins/citeck/skills/citeck-auth/SKILL.md) | Configure Citeck ECOS connection — set URL, credentials, and test connectivity |
 | [citeck-changes-to-task](plugins/citeck/skills/citeck-changes-to-task/SKILL.md) | Create a Citeck Project Tracker issue from current git changes |
 | [citeck-changes-to-task-md](plugins/citeck/skills/citeck-changes-to-task-md/SKILL.md) | Generate task.md file with structured task description from git changes |
+| [citeck-ask-docs](plugins/citeck/skills/citeck-ask-docs/SKILL.md) | Ask a question about Citeck — semantic search over citeck-docs with cited answer |
 
 ### citeck-auth
 
@@ -150,6 +157,16 @@ Generate a `task.md` file with a structured task description from git changes. D
 /citeck:citeck-changes-to-task-md
 ```
 
+### citeck-ask-docs
+
+Ask a question about the Citeck ECOS platform — semantic search over `citeck-docs` via RAG, answer synthesized with citations.
+
+```bash
+/citeck:citeck-ask-docs <question>
+```
+
+The RAG service is reached via the profile set as `docs_profile` in `~/.citeck/credentials.json` (falls back to the active profile). Switch it with the `set_docs_profile` MCP tool if needed.
+
 ### Shared Library
 
 The plugin includes a shared library (`plugins/citeck/lib/`) used by the MCP server and auth scripts:
@@ -189,7 +206,7 @@ Note: passwords are stored in plaintext in `credentials.json`. This is acceptabl
 └── plugins/
     └── citeck/                     # Plugin
         ├── .claude-plugin/
-        │   └── plugin.json         # Plugin manifest (v3.2.2)
+        │   └── plugin.json         # Plugin manifest
         ├── .mcp.json               # MCP server config (uv run)
         ├── pyproject.toml           # Python dependencies (FastMCP)
         ├── servers/
@@ -202,6 +219,7 @@ Note: passwords are stored in plaintext in `credentials.json`. This is acceptabl
         ├── skills/
         │   ├── _shared/             # Shared prompts (task description guide)
         │   ├── citeck-auth/         # Auth setup skill (PKCE browser flow)
+        │   ├── citeck-ask-docs/     # Ask Citeck docs via RAG
         │   ├── citeck-changes-to-task/     # Create issue from git changes
         │   └── citeck-changes-to-task-md/  # Generate task.md from git changes
         └── tests/                   # Unit tests
