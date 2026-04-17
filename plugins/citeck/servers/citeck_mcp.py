@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,6 +20,9 @@ from lib.auth import AuthError, get_auth_header, validate_connection, get_userna
 from lib.config import (
     get_credentials, get_active_profile,
     get_projects, get_default_project, set_default_project,
+    get_docs_profile as lib_get_docs_profile,
+    set_docs_profile as lib_set_docs_profile,
+    clear_docs_profile,
     ConfigError,
 )
 from lib.records_api import (
@@ -27,6 +31,35 @@ from lib.records_api import (
     records_mutate as lib_records_mutate,
     RecordsApiError,
 )
+from lib.rag_api import (
+    search_docs as lib_search_docs,
+    resolve_docs_profile,
+    RagApiError,
+    DEFAULT_TOP_K as RAG_DEFAULT_TOP_K,
+    DEFAULT_THRESHOLD as RAG_DEFAULT_THRESHOLD,
+)
+
+
+def _cleanup_old_downloads(max_age_days: int = 7) -> None:
+    """Remove files under ~/.citeck/downloads/ older than max_age_days."""
+    downloads_dir = os.path.expanduser("~/.citeck/downloads")
+    if not os.path.isdir(downloads_dir):
+        return
+    cutoff = time.time() - max_age_days * 86400
+    try:
+        entries = os.listdir(downloads_dir)
+    except OSError:
+        return
+    for name in entries:
+        path = os.path.join(downloads_dir, name)
+        try:
+            if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                os.remove(path)
+        except OSError:
+            pass
+
+
+_cleanup_old_downloads()
 
 # In-memory cache for fetched projects, keyed by (profile, url).
 # Avoids redundant API calls within a session. Note: if credentials
@@ -286,6 +319,135 @@ def set_project_default(
             "default_project": project,
             "projects": get_projects(profile=profile, config_dir=config_dir),
         }
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+_RAG_MAX_CONTENT_CHARS = 2000
+_DOC_SOURCE_EXTENSIONS = (".rst", ".md", ".txt", ".adoc")
+
+
+def _build_doc_url(metadata: dict) -> str | None:
+    """Construct a published-docs URL from RAG metadata.
+
+    Mirrors ecos-ai's DocumentationContentProcessor.buildDocumentationUrl:
+    strips docs_root_path prefix, replaces the source extension with
+    url_extension, and joins with base_doc_url. Returns None when
+    base_doc_url or file_path is missing.
+    """
+    base = (metadata.get("base_doc_url") or "").strip()
+    file_path = (metadata.get("file_path") or "").strip()
+    if not base or not file_path:
+        return None
+    path = file_path
+    root = (metadata.get("docs_root_path") or "").strip("/")
+    if root:
+        prefix = root + "/"
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+    ext = metadata.get("url_extension") or ""
+    for src_ext in _DOC_SOURCE_EXTENSIONS:
+        if path.endswith(src_ext):
+            path = path[: -len(src_ext)] + ext
+            break
+    return base.rstrip("/") + "/" + path.lstrip("/")
+
+
+def _trim_docs_hit(hit: dict) -> dict:
+    """Strip noisy metadata from a RAG search result and truncate content."""
+    metadata = hit.get("metadata") or {}
+    content = hit.get("content") or ""
+    if len(content) > _RAG_MAX_CONTENT_CHARS:
+        content = content[:_RAG_MAX_CONTENT_CHARS] + "…"
+    result = {
+        "score": hit.get("score"),
+        "file_path": metadata.get("file_path", ""),
+        "file_type": metadata.get("file_type", ""),
+        "source_id": hit.get("sourceId") or metadata.get("source_id", ""),
+        "content": content,
+    }
+    url = _build_doc_url(metadata)
+    if url:
+        result["url"] = url
+    return result
+
+
+@mcp.tool
+def search_docs(
+    question: str,
+    top_k: int = RAG_DEFAULT_TOP_K,
+    threshold: float = RAG_DEFAULT_THRESHOLD,
+    profile: str | None = None,
+) -> dict:
+    """Search Citeck ECOS platform documentation (citeck-docs) via RAG.
+
+    Use this tool for questions about the Citeck platform itself — how-to,
+    configuration, concepts, APIs. Routes through the configured docs_profile
+    if set, otherwise through the active profile. If the active profile points
+    to a local Citeck without a RAG index, set a docs_profile via
+    `set_docs_profile` to target a server where citeck-docs is indexed.
+
+    Args:
+        question: Natural-language question about Citeck documentation.
+        top_k: Max number of matching snippets to return (default: 5).
+        threshold: Similarity threshold 0.0-1.0 (default: 0.4).
+        profile: Override the profile for this call only. Usually leave empty.
+    """
+    if not question or not question.strip():
+        return {"ok": False, "error": "question must not be empty."}
+
+    config_dir = _get_config_dir()
+    try:
+        resolved, creds = resolve_docs_profile(profile=profile, config_dir=config_dir)
+        raw_results = lib_search_docs(
+            query=question,
+            top_k=top_k,
+            threshold=threshold,
+            profile=resolved,
+            config_dir=config_dir,
+        )
+        results = [_trim_docs_hit(hit) for hit in raw_results]
+        return {
+            "ok": True,
+            "count": len(results),
+            "profile": resolved,
+            "server": creds["url"].rstrip("/"),
+            "results": results,
+        }
+    except RagApiError as e:
+        return {"ok": False, "error": str(e)}
+    except AuthError as e:
+        return {"ok": False, "error": str(e)}
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool
+def set_docs_profile(profile: str) -> dict:
+    """Set which credentials profile hosts the citeck-docs RAG index.
+
+    Use this when the active profile points to a local Citeck without RAG,
+    but documentation questions should be routed to a different server where
+    citeck-docs is indexed. Pass an empty string to clear the setting and
+    fall back to the active profile.
+
+    Args:
+        profile: Profile name (must already be configured via /citeck:citeck-auth),
+                 or empty string to clear the setting.
+    """
+    config_dir = _get_config_dir()
+    try:
+        if not profile or not profile.strip():
+            clear_docs_profile(config_dir)
+            return {"ok": True, "docs_profile": None, "cleared": True}
+        lib_set_docs_profile(profile, config_dir)
+        creds = get_credentials(profile, config_dir)
+        server = creds["url"].rstrip("/") if creds else None
+        return {"ok": True, "docs_profile": profile, "server": server}
     except ConfigError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:

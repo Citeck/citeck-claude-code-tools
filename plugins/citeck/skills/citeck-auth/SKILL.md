@@ -1,7 +1,7 @@
 ---
 name: citeck-auth
 description: "Configure Citeck ECOS connection - set URL, credentials, and test connectivity. Use when the user needs to set up or manage Citeck authentication."
-allowed-tools: Bash(python3 */skills/citeck-auth/scripts/setup.py *, python3 */skills/citeck-auth/scripts/setup_pkce.py *, python3 */skills/citeck-auth/scripts/test_connection.py *, python3 */skills/citeck-auth/scripts/switch_profile.py *), AskUserQuestion
+allowed-tools: Bash(python3 */skills/citeck-auth/scripts/setup.py *, python3 */skills/citeck-auth/scripts/setup_pkce.py *, python3 */skills/citeck-auth/scripts/test_connection.py *, python3 */skills/citeck-auth/scripts/switch_profile.py *), AskUserQuestion, mcp__citeck__set_docs_profile
 ---
 
 # Citeck ECOS Authentication Setup
@@ -134,6 +134,11 @@ Run `switch_profile.py --list` to check if profiles already exist.
    - Run `setup.py` passing secrets via environment variables
 6. Run `test_connection.py` to verify the connection
 7. Report the result to the user
+8. **Optional: mark this profile as the docs source.** Ask via AskUserQuestion:
+   > **Use this profile as the citeck-docs source for `/citeck:citeck-ask-docs`?**
+   > Options: "Yes", "No"
+
+   Only suggest "Yes" if this profile plausibly hosts the citeck-docs RAG index (typically a production or shared server, not an empty local instance). If confirmed, call `mcp__citeck__set_docs_profile(profile: "<name>")`.
 
 ## Re-authentication
 
@@ -149,6 +154,8 @@ Profile entries include discovered OIDC metadata:
 - `eis_id` — Keycloak host identifier
 - `token_endpoint` — Full URL to the OIDC token endpoint
 - `authorization_endpoint` — Full URL to the OIDC authorization endpoint
+
+A top-level `docs_profile` field (separate from `active_profile`) picks which profile handles citeck-docs RAG search. If unset, docs search falls back to the active profile.
 
 If you need to verify permissions manually:
 ```bash

@@ -22,6 +22,14 @@ All tools are available as `mcp__citeck__<tool_name>`:
 - `query_comments` — fetch comments for a record with auto-download of image attachments
 - `download_attachment` — download a file from Citeck via authenticated session
 - `query_sprints`, `query_components`, `query_tags`, `query_releases` — project metadata
+- `search_docs` — RAG-backed semantic search over the citeck-docs repository
+- `set_docs_profile` — pick which credentials profile hosts the citeck-docs RAG index
+
+## Documentation Search
+
+Ask platform documentation questions via `/citeck:citeck-ask-docs` or by letting Claude call `search_docs` automatically. Behind the scenes the MCP tool `POST`s to `{server}/gateway/rag/api/rag/search` with `sourceType=GITLAB` and `includeRepoIds=["citeck-docs"]`.
+
+Search is routed through the profile selected by `docs_profile` in `~/.citeck/credentials.json` (falls back to the active profile). This lets you work against a local Citeck while documentation questions target a remote server where citeck-docs is indexed. The field is set via the MCP tool `set_docs_profile` or through `/citeck:citeck-auth`.
 
 ## Authentication
 

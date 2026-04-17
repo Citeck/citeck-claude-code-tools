@@ -9,11 +9,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from lib.config import (
     ConfigError,
+    clear_docs_profile,
     get_active_profile,
     get_credentials,
+    get_docs_profile,
     get_profiles,
     save_credentials,
     set_active_profile,
+    set_docs_profile,
 )
 
 
@@ -173,6 +176,44 @@ class TestConfig(unittest.TestCase):
                          "https://eis.example.com/auth/realms/Infrastructure/protocol/openid-connect/token")
         self.assertEqual(creds["authorization_endpoint"],
                          "https://eis.example.com/auth/realms/Infrastructure/protocol/openid-connect/auth")
+
+    # --- docs_profile ---
+
+    def test_docs_profile_default_none(self):
+        self.assertIsNone(get_docs_profile(config_dir=self.config_dir))
+
+    def test_set_and_get_docs_profile(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_docs_profile("prod", config_dir=self.config_dir)
+        self.assertEqual(get_docs_profile(config_dir=self.config_dir), "prod")
+
+    def test_set_docs_profile_nonexistent(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        with self.assertRaises(ConfigError):
+            set_docs_profile("ghost", config_dir=self.config_dir)
+
+    def test_clear_docs_profile(self):
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_docs_profile("prod", config_dir=self.config_dir)
+        clear_docs_profile(config_dir=self.config_dir)
+        self.assertIsNone(get_docs_profile(config_dir=self.config_dir))
+
+    def test_docs_profile_independent_of_active(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_docs_profile("prod", config_dir=self.config_dir)
+        # active stays "local" (first profile saved)
+        self.assertEqual(get_active_profile(config_dir=self.config_dir), "local")
+        self.assertEqual(get_docs_profile(config_dir=self.config_dir), "prod")
+
+    def test_docs_profile_preserved_across_rewrites(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_docs_profile("prod", config_dir=self.config_dir)
+        # Overwriting an unrelated profile must not clear docs_profile
+        save_credentials("local", "http://l2", "u", "p", config_dir=self.config_dir)
+        self.assertEqual(get_docs_profile(config_dir=self.config_dir), "prod")
 
     def test_pkce_and_password_profiles_coexist(self):
         save_credentials(

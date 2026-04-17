@@ -121,6 +121,38 @@ def set_active_profile(name, config_dir=None):
     _write_config(data, config_dir)
 
 
+def get_docs_profile(config_dir=None):
+    """Return the profile name used for citeck-docs RAG search, or None if unset.
+
+    Separate from active_profile because users often work against a local Citeck
+    while documentation is indexed on a different (e.g. production) server.
+    """
+    data = _read_config(config_dir)
+    value = data.get("docs_profile")
+    return value if isinstance(value, str) and value else None
+
+
+def set_docs_profile(name, config_dir=None):
+    """Set the profile to use for citeck-docs RAG search.
+
+    Raises ConfigError if profile doesn't exist.
+    """
+    _validate_profile_name(name)
+    data = _read_config(config_dir)
+    if name not in data["profiles"]:
+        raise ConfigError(f"Profile '{name}' does not exist. Available: {list(data['profiles'].keys())}")
+    data["docs_profile"] = name
+    _write_config(data, config_dir)
+
+
+def clear_docs_profile(config_dir=None):
+    """Remove the docs_profile setting so search_docs falls back to the active profile."""
+    data = _read_config(config_dir)
+    if "docs_profile" in data:
+        del data["docs_profile"]
+        _write_config(data, config_dir)
+
+
 def _get_profile_data(profile=None, config_dir=None):
     """Return (data, profile_name, profile_dict) for the given or active profile."""
     data = _read_config(config_dir)
