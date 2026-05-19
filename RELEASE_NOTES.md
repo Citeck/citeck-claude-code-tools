@@ -1,5 +1,34 @@
 # Релизы
 
+## v3.5.0 (2026-05-19)
+
+### 🎉 Маршрутизация инструментов по разным окружениям
+
+`ept_profile` и `records_profile` — новые поля в `credentials.json`, которые позволяют направлять разные группы инструментов в разные окружения Citeck. Типичный сценарий: трекер задач на проде, records-запросы локально.
+
+- `ept_profile` — task-tracker инструменты: `search_issues`, `create_issue`, `update_issue`, `list_projects`, `set_project_default`, `query_sprints/components/tags/releases`, `query_comments`, `download_attachment`
+- `records_profile` — `records_query` и `records_mutate`
+- Каждая настройка независима и при отсутствии откатывается на `active_profile`
+- Новые MCP-инструменты `set_ept_profile` и `set_records_profile` (пустая строка очищает настройку)
+- Каждый затронутый инструмент также принимает разовый параметр `profile` для конкретного вызова
+- `/citeck:citeck-auth` после настройки нового профиля предлагает назначить его как ept/records
+
+### 🆕 Новое
+
+- `list_profiles` — список настроенных профилей с не-секретными метаданными (url, auth_method, флаги `is_active`/`is_docs`/`is_ept`/`is_records`)
+- `set_active_profile` — переключение активного профиля без повторного вызова `/citeck:citeck-auth`
+- В ответе `test_connection` теперь возвращается имя активного профиля
+
+### 🐛 Исправления
+
+- Сообщение об ошибке в `resolve_docs_profile` ложно ссылалось на `docs_profile`, когда вызывающий явно передавал `profile=` с совпадающим именем — теперь сообщение корректно отличает явный override от резолва через настройку
+
+### Тесты
+
+- 378 тестов (+34)
+
+---
+
 ## v3.4.0 (2026-04-17)
 
 ### 🎉 Поиск по документации Citeck
