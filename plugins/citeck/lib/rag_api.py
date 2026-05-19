@@ -56,7 +56,7 @@ def resolve_docs_profile(profile=None, config_dir=None):
     creds = config.get_credentials(resolved, config_dir)
     if creds is None:
         docs_profile = config.get_docs_profile(config_dir)
-        if docs_profile == resolved:
+        if profile is None and docs_profile == resolved:
             raise RagApiError(
                 f"Profile '{resolved}' referenced by docs_profile is not configured. "
                 "Run '/citeck:citeck-auth' to add it, or call set_docs_profile with a "

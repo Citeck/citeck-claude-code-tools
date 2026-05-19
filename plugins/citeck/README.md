@@ -24,12 +24,32 @@ All tools are available as `mcp__citeck__<tool_name>`:
 - `query_sprints`, `query_components`, `query_tags`, `query_releases` — project metadata
 - `search_docs` — RAG-backed semantic search over the citeck-docs repository
 - `set_docs_profile` — pick which credentials profile hosts the citeck-docs RAG index
+- `set_ept_profile` — pick the profile used by all task-tracker (ept) tools
+- `set_records_profile` — pick the profile used by plain `records_query` / `records_mutate`
+- `list_profiles`, `set_active_profile` — inspect and switch the active profile
 
 ## Documentation Search
 
 Ask platform documentation questions via `/citeck:citeck-ask-docs` or by letting Claude call `search_docs` automatically. Behind the scenes the MCP tool `POST`s to `{server}/gateway/rag/api/rag/search` with `sourceType=GITLAB` and `includeRepoIds=["citeck-docs"]`.
 
 Search is routed through the profile selected by `docs_profile` in `~/.citeck/credentials.json` (falls back to the active profile). This lets you work against a local Citeck while documentation questions target a remote server where citeck-docs is indexed. The field is set via the MCP tool `set_docs_profile` or through `/citeck:citeck-auth`.
+
+## Specialized profiles
+
+`docs_profile`, `ept_profile`, and `records_profile` are stored at the top level of `~/.citeck/credentials.json` (alongside `active_profile`). Each routes a specific group of tools to a chosen environment and falls back to `active_profile` when unset:
+
+- `docs_profile` — `search_docs`
+- `ept_profile` — `search_issues`, `create_issue`, `update_issue`, `list_projects`, `set_project_default`, `query_sprints`/`components`/`tags`/`releases`, `query_comments`, `download_attachment`
+- `records_profile` — `records_query`, `records_mutate`
+
+Typical setup when the task tracker is on production and records work happens locally:
+
+```
+set_ept_profile(profile="prod")
+set_records_profile(profile="local")
+```
+
+Pass an empty string to clear a setting. Every affected tool also accepts an optional per-call `profile` argument for one-off overrides.
 
 ## Authentication
 

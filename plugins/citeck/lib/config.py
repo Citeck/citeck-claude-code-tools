@@ -153,6 +153,127 @@ def clear_docs_profile(config_dir=None):
         _write_config(data, config_dir)
 
 
+def get_ept_profile(config_dir=None):
+    """Return the profile name used for task-tracker (ept) tools, or None if unset.
+
+    Separate from active_profile because users often work with the task tracker
+    on a remote (production) server while running plain records queries against
+    a local Citeck.
+    """
+    data = _read_config(config_dir)
+    value = data.get("ept_profile")
+    return value if isinstance(value, str) and value else None
+
+
+def set_ept_profile(name, config_dir=None):
+    """Set the profile to use for task-tracker (ept) tools.
+
+    Raises ConfigError if profile doesn't exist.
+    """
+    _validate_profile_name(name)
+    data = _read_config(config_dir)
+    if name not in data["profiles"]:
+        raise ConfigError(f"Profile '{name}' does not exist. Available: {list(data['profiles'].keys())}")
+    data["ept_profile"] = name
+    _write_config(data, config_dir)
+
+
+def clear_ept_profile(config_dir=None):
+    """Remove the ept_profile setting so tracker tools fall back to the active profile."""
+    data = _read_config(config_dir)
+    if "ept_profile" in data:
+        del data["ept_profile"]
+        _write_config(data, config_dir)
+
+
+def get_records_profile(config_dir=None):
+    """Return the profile name used for plain records query/mutate tools, or None if unset.
+
+    Separate from active_profile because users often run records queries against
+    a local Citeck while the task tracker lives on a remote (production) server.
+    """
+    data = _read_config(config_dir)
+    value = data.get("records_profile")
+    return value if isinstance(value, str) and value else None
+
+
+def set_records_profile(name, config_dir=None):
+    """Set the profile to use for plain records query/mutate tools.
+
+    Raises ConfigError if profile doesn't exist.
+    """
+    _validate_profile_name(name)
+    data = _read_config(config_dir)
+    if name not in data["profiles"]:
+        raise ConfigError(f"Profile '{name}' does not exist. Available: {list(data['profiles'].keys())}")
+    data["records_profile"] = name
+    _write_config(data, config_dir)
+
+
+def clear_records_profile(config_dir=None):
+    """Remove the records_profile setting so records_query/mutate fall back to the active profile."""
+    data = _read_config(config_dir)
+    if "records_profile" in data:
+        del data["records_profile"]
+        _write_config(data, config_dir)
+
+
+def resolve_ept_profile(profile=None, config_dir=None):
+    """Return (resolved_profile_name, creds_dict) for task-tracker (ept) tools.
+
+    Priority:
+      1. Explicit `profile` argument.
+      2. `ept_profile` field in credentials.json.
+      3. Active profile (fallback).
+
+    Raises ConfigError if the resolved profile name doesn't correspond to a
+    configured profile.
+    """
+    resolved = profile or get_ept_profile(config_dir) or get_active_profile(config_dir)
+    creds = get_credentials(resolved, config_dir)
+    if creds is None:
+        ept = get_ept_profile(config_dir)
+        if profile is None and ept == resolved:
+            raise ConfigError(
+                f"Profile '{resolved}' referenced by ept_profile is not configured. "
+                "Run '/citeck:citeck-auth' to add it, or call set_ept_profile with a "
+                "valid profile name."
+            )
+        raise ConfigError(
+            f"No credentials found for profile '{resolved}'. "
+            "Run '/citeck:citeck-auth' to configure."
+        )
+    return resolved, creds
+
+
+def resolve_records_profile(profile=None, config_dir=None):
+    """Return (resolved_profile_name, creds_dict) for plain records query/mutate tools.
+
+    Priority:
+      1. Explicit `profile` argument.
+      2. `records_profile` field in credentials.json.
+      3. Active profile (fallback).
+
+    Raises ConfigError if the resolved profile name doesn't correspond to a
+    configured profile.
+    """
+    resolved = profile or get_records_profile(config_dir) or get_active_profile(config_dir)
+    creds = get_credentials(resolved, config_dir)
+    if creds is None:
+        rec = get_records_profile(config_dir)
+        if profile is None and rec == resolved:
+            raise ConfigError(
+                f"Profile '{resolved}' referenced by records_profile is not configured. "
+                "Run '/citeck:citeck-auth' to add it, or call set_records_profile with a "
+                "valid profile name."
+            )
+        raise ConfigError(
+            f"No credentials found for profile '{resolved}'. "
+            "Run '/citeck:citeck-auth' to configure."
+        )
+    return resolved, creds
+
+
 def _get_profile_data(profile=None, config_dir=None):
     """Return (data, profile_name, profile_dict) for the given or active profile."""
     data = _read_config(config_dir)

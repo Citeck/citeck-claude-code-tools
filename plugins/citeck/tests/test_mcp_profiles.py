@@ -49,11 +49,15 @@ async def test_profile_tools_registered(client: Client):
     names = [t.name for t in tools]
     assert "list_profiles" in names
     assert "set_active_profile" in names
+    assert "set_ept_profile" in names
+    assert "set_records_profile" in names
 
 
 async def test_list_profiles_returns_metadata(client: Client, config_dir: str):
     config.set_active_profile("local", config_dir)
     config.set_docs_profile("prod", config_dir)
+    config.set_ept_profile("prod", config_dir)
+    config.set_records_profile("local", config_dir)
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
         result = await client.call_tool("list_profiles", {})
 
@@ -61,6 +65,8 @@ async def test_list_profiles_returns_metadata(client: Client, config_dir: str):
     assert data["ok"] is True
     assert data["active"] == "local"
     assert data["docs_profile"] == "prod"
+    assert data["ept_profile"] == "prod"
+    assert data["records_profile"] == "local"
 
     by_name = {p["name"]: p for p in data["profiles"]}
     assert set(by_name.keys()) == {"local", "prod"}
@@ -69,10 +75,14 @@ async def test_list_profiles_returns_metadata(client: Client, config_dir: str):
     assert by_name["local"]["auth_method"] == "oidc"
     assert by_name["local"]["is_active"] is True
     assert by_name["local"]["is_docs"] is False
+    assert by_name["local"]["is_ept"] is False
+    assert by_name["local"]["is_records"] is True
 
     assert by_name["prod"]["url"] == "https://citeck.example.com"
     assert by_name["prod"]["is_active"] is False
     assert by_name["prod"]["is_docs"] is True
+    assert by_name["prod"]["is_ept"] is True
+    assert by_name["prod"]["is_records"] is False
 
     # Sensitive fields must never leak.
     for p in data["profiles"]:
@@ -90,8 +100,86 @@ async def test_list_profiles_empty(client: Client):
         assert data["profiles"] == []
         assert data["active"] == "default"
         assert data["docs_profile"] is None
+        assert data["ept_profile"] is None
+        assert data["records_profile"] is None
     finally:
         shutil.rmtree(empty_dir, ignore_errors=True)
+
+
+# --- set_ept_profile ---
+
+async def test_set_ept_profile_success(client: Client, config_dir: str):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("set_ept_profile", {"profile": "prod"})
+    data = result.data
+    assert data["ok"] is True
+    assert data["ept_profile"] == "prod"
+    assert data["server"] == "https://citeck.example.com"
+    assert config.get_ept_profile(config_dir) == "prod"
+
+
+async def test_set_ept_profile_clears_when_empty(client: Client, config_dir: str):
+    config.set_ept_profile("prod", config_dir)
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("set_ept_profile", {"profile": ""})
+    data = result.data
+    assert data["ok"] is True
+    assert data.get("cleared") is True
+    assert config.get_ept_profile(config_dir) is None
+
+
+async def test_set_ept_profile_rejects_unknown(client: Client, config_dir: str):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("set_ept_profile", {"profile": "ghost"})
+    assert result.data["ok"] is False
+    assert "ghost" in result.data["error"]
+
+
+async def test_set_ept_profile_rejects_path_traversal(client: Client, config_dir: str):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("set_ept_profile", {"profile": "../secret"})
+    assert result.data["ok"] is False
+    err = result.data["error"].lower()
+    assert "invalid" in err or "../secret" in result.data["error"]
+    assert config.get_ept_profile(config_dir) is None
+
+
+# --- set_records_profile ---
+
+async def test_set_records_profile_success(client: Client, config_dir: str):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("set_records_profile", {"profile": "local"})
+    data = result.data
+    assert data["ok"] is True
+    assert data["records_profile"] == "local"
+    assert data["server"] == "http://localhost"
+    assert config.get_records_profile(config_dir) == "local"
+
+
+async def test_set_records_profile_clears_when_empty(client: Client, config_dir: str):
+    config.set_records_profile("local", config_dir)
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("set_records_profile", {"profile": ""})
+    data = result.data
+    assert data["ok"] is True
+    assert data.get("cleared") is True
+    assert config.get_records_profile(config_dir) is None
+
+
+async def test_set_records_profile_rejects_unknown(client: Client, config_dir: str):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("set_records_profile", {"profile": "ghost"})
+    assert result.data["ok"] is False
+    assert "ghost" in result.data["error"]
+
+
+async def test_set_records_profile_rejects_path_traversal(client: Client, config_dir: str):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("set_records_profile", {"profile": "../secret"})
+    assert result.data["ok"] is False
+    err = result.data["error"].lower()
+    assert "invalid" in err or "../secret" in result.data["error"]
+    assert config.get_records_profile(config_dir) is None
 
 
 async def test_set_active_profile_success(client: Client, config_dir: str):

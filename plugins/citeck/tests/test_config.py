@@ -10,13 +10,21 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lib.config import (
     ConfigError,
     clear_docs_profile,
+    clear_ept_profile,
+    clear_records_profile,
     get_active_profile,
     get_credentials,
     get_docs_profile,
+    get_ept_profile,
     get_profiles,
+    get_records_profile,
+    resolve_ept_profile,
+    resolve_records_profile,
     save_credentials,
     set_active_profile,
     set_docs_profile,
+    set_ept_profile,
+    set_records_profile,
 )
 
 
@@ -214,6 +222,134 @@ class TestConfig(unittest.TestCase):
         # Overwriting an unrelated profile must not clear docs_profile
         save_credentials("local", "http://l2", "u", "p", config_dir=self.config_dir)
         self.assertEqual(get_docs_profile(config_dir=self.config_dir), "prod")
+
+    # --- ept_profile ---
+
+    def test_ept_profile_default_none(self):
+        self.assertIsNone(get_ept_profile(config_dir=self.config_dir))
+
+    def test_set_and_get_ept_profile(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_ept_profile("prod", config_dir=self.config_dir)
+        self.assertEqual(get_ept_profile(config_dir=self.config_dir), "prod")
+
+    def test_set_ept_profile_nonexistent(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        with self.assertRaises(ConfigError):
+            set_ept_profile("ghost", config_dir=self.config_dir)
+
+    def test_clear_ept_profile(self):
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_ept_profile("prod", config_dir=self.config_dir)
+        clear_ept_profile(config_dir=self.config_dir)
+        self.assertIsNone(get_ept_profile(config_dir=self.config_dir))
+
+    def test_ept_profile_independent_of_active_and_docs(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_docs_profile("prod", config_dir=self.config_dir)
+        set_ept_profile("prod", config_dir=self.config_dir)
+        # active stays "local" (first profile saved)
+        self.assertEqual(get_active_profile(config_dir=self.config_dir), "local")
+        self.assertEqual(get_docs_profile(config_dir=self.config_dir), "prod")
+        self.assertEqual(get_ept_profile(config_dir=self.config_dir), "prod")
+
+    # --- records_profile ---
+
+    def test_records_profile_default_none(self):
+        self.assertIsNone(get_records_profile(config_dir=self.config_dir))
+
+    def test_set_and_get_records_profile(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_records_profile("local", config_dir=self.config_dir)
+        self.assertEqual(get_records_profile(config_dir=self.config_dir), "local")
+
+    def test_set_records_profile_nonexistent(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        with self.assertRaises(ConfigError):
+            set_records_profile("ghost", config_dir=self.config_dir)
+
+    def test_clear_records_profile(self):
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_records_profile("prod", config_dir=self.config_dir)
+        clear_records_profile(config_dir=self.config_dir)
+        self.assertIsNone(get_records_profile(config_dir=self.config_dir))
+
+    # --- resolvers ---
+
+    def test_resolve_ept_profile_falls_back_to_active(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        name, creds = resolve_ept_profile(config_dir=self.config_dir)
+        self.assertEqual(name, "local")
+        self.assertEqual(creds["url"], "http://l")
+
+    def test_resolve_ept_profile_uses_ept_setting(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_ept_profile("prod", config_dir=self.config_dir)
+        name, creds = resolve_ept_profile(config_dir=self.config_dir)
+        self.assertEqual(name, "prod")
+        self.assertEqual(creds["url"], "http://p")
+
+    def test_resolve_ept_profile_explicit_overrides_setting(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_ept_profile("prod", config_dir=self.config_dir)
+        name, _ = resolve_ept_profile(profile="local", config_dir=self.config_dir)
+        self.assertEqual(name, "local")
+
+    def test_resolve_ept_profile_missing_referenced(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        # Manually corrupt: set ept_profile to a non-existent profile.
+        # Use set_ept_profile after temporarily adding then removing.
+        save_credentials("ghost", "http://g", "u", "p", config_dir=self.config_dir)
+        set_ept_profile("ghost", config_dir=self.config_dir)
+        # Now remove ghost from profiles by rewriting config.
+        path = os.path.join(self.config_dir, "credentials.json")
+        with open(path) as f:
+            data = json.load(f)
+        del data["profiles"]["ghost"]
+        with open(path, "w") as f:
+            json.dump(data, f)
+        with self.assertRaises(ConfigError) as ctx:
+            resolve_ept_profile(config_dir=self.config_dir)
+        self.assertIn("ept_profile", str(ctx.exception))
+
+    def test_resolve_ept_profile_explicit_override_missing_does_not_blame_setting(self):
+        # ept_profile points to "prod" but caller explicitly passes profile="prod"
+        # too. If prod has no creds, the error should NOT say "referenced by
+        # ept_profile" because the caller went through the explicit-override path.
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_ept_profile("prod", config_dir=self.config_dir)
+        path = os.path.join(self.config_dir, "credentials.json")
+        with open(path) as f:
+            data = json.load(f)
+        del data["profiles"]["prod"]
+        with open(path, "w") as f:
+            json.dump(data, f)
+        with self.assertRaises(ConfigError) as ctx:
+            resolve_ept_profile(profile="prod", config_dir=self.config_dir)
+        self.assertNotIn("ept_profile", str(ctx.exception))
+        self.assertIn("prod", str(ctx.exception))
+
+    def test_resolve_records_profile_falls_back_to_active(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        name, creds = resolve_records_profile(config_dir=self.config_dir)
+        self.assertEqual(name, "local")
+        self.assertEqual(creds["url"], "http://l")
+
+    def test_resolve_records_profile_uses_records_setting(self):
+        save_credentials("local", "http://l", "u", "p", config_dir=self.config_dir)
+        save_credentials("prod", "http://p", "u", "p", config_dir=self.config_dir)
+        set_records_profile("local", config_dir=self.config_dir)
+        # Make prod active so we can verify records_setting wins
+        set_active_profile("prod", config_dir=self.config_dir)
+        name, creds = resolve_records_profile(config_dir=self.config_dir)
+        self.assertEqual(name, "local")
+        self.assertEqual(creds["url"], "http://l")
 
     def test_pkce_and_password_profiles_coexist(self):
         save_credentials(

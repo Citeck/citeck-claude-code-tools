@@ -24,6 +24,14 @@ from lib.config import (
     get_docs_profile as lib_get_docs_profile,
     set_docs_profile as lib_set_docs_profile,
     clear_docs_profile,
+    get_ept_profile as lib_get_ept_profile,
+    set_ept_profile as lib_set_ept_profile,
+    clear_ept_profile,
+    get_records_profile as lib_get_records_profile,
+    set_records_profile as lib_set_records_profile,
+    clear_records_profile,
+    resolve_ept_profile,
+    resolve_records_profile,
     ConfigError,
 )
 from lib.records_api import (
@@ -82,7 +90,15 @@ mcp = FastMCP(
         "in bug reports are essential for understanding the issue.\n\n"
         "Multiple environments are supported via profiles. Use list_profiles to see "
         "configured environments and set_active_profile to switch between them — "
-        "do NOT ask the user to invoke /citeck:citeck-auth just to switch."
+        "do NOT ask the user to invoke /citeck:citeck-auth just to switch.\n\n"
+        "Specialized profiles can route specific tool groups to different environments:\n"
+        "- ept_profile (set_ept_profile): task-tracker tools (search_issues, create_issue, "
+        "update_issue, list_projects, query_sprints/components/tags/releases, query_comments, "
+        "download_attachment).\n"
+        "- records_profile (set_records_profile): plain records_query / records_mutate.\n"
+        "- docs_profile (set_docs_profile): search_docs.\n"
+        "Each falls back to active_profile when unset. Useful e.g. when the tracker is on "
+        "production but records queries should hit a local Citeck."
     ),
 )
 
@@ -143,12 +159,15 @@ def records_query(
     page: dict | None = None,
     sort_by: list[dict] | None = None,
     workspaces: list[str] | None = None,
+    profile: str | None = None,
 ) -> dict:
     """Query or load records from Citeck ECOS Records API.
 
     Two modes:
     - Query by predicate: provide source_id (and optionally query, language, page, workspaces)
     - Load by IDs: provide record_ids
+
+    Routes through records_profile if set, otherwise the active profile.
 
     Note: for issue queries, the assignee field is called "implementer" (not "assignee").
     Example predicate: {"t": "contains", "att": "implementer", "val": ["emodel/person@username"]}
@@ -162,6 +181,7 @@ def records_query(
         page: Pagination dict with 'maxItems' and/or 'skipCount'.
         sort_by: List of sort dicts (e.g. [{"attribute": "_created", "ascending": false}]).
         workspaces: List of workspace/project keys to filter by.
+        profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
@@ -172,10 +192,12 @@ def records_query(
         }
 
     try:
+        resolved, _ = resolve_records_profile(profile=profile, config_dir=config_dir)
         if record_ids:
             response = lib_records_load(
                 record_ids=record_ids,
                 attributes=attributes,
+                profile=resolved,
                 config_dir=config_dir,
             )
         else:
@@ -187,10 +209,13 @@ def records_query(
                 page=page,
                 sort_by=sort_by,
                 workspaces=workspaces,
+                profile=resolved,
                 config_dir=config_dir,
             )
         return {"ok": True, **response}
     except RecordsApiError as e:
+        return {"ok": False, "error": str(e)}
+    except ConfigError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"Unexpected error: {e}"}
@@ -200,8 +225,11 @@ def records_query(
 def records_mutate(
     records: list[dict],
     version: int = 1,
+    profile: str | None = None,
 ) -> dict:
     """Create or update records via Citeck ECOS Records API.
+
+    Routes through records_profile if set, otherwise the active profile.
 
     Args:
         records: List of record dicts, each with 'id' and 'attributes'.
@@ -210,6 +238,7 @@ def records_mutate(
                  Attributes MUST have type suffixes (e.g. "summary?str", "_state?str").
                  "_workspace?str" is MANDATORY for both create and update.
         version: API version (default: 1).
+        profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
@@ -220,17 +249,18 @@ def records_mutate(
         }
 
     try:
-        profile = get_active_profile(config_dir)
-        creds = get_credentials(profile, config_dir)
-        server_url = creds["url"].rstrip("/") if creds else None
+        resolved, creds = resolve_records_profile(profile=profile, config_dir=config_dir)
+        server_url = creds["url"].rstrip("/")
         response = lib_records_mutate(
             records=records,
             version=version,
-            profile=profile,
+            profile=resolved,
             config_dir=config_dir,
         )
-        return {"ok": True, "profile": profile, "server": server_url, **response}
+        return {"ok": True, "profile": resolved, "server": server_url, **response}
     except RecordsApiError as e:
+        return {"ok": False, "error": str(e)}
+    except ConfigError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"Unexpected error: {e}"}
@@ -239,20 +269,22 @@ def records_mutate(
 @mcp.tool
 def list_projects(
     fetch: bool = False,
+    profile: str | None = None,
 ) -> dict:
     """List projects and optionally fetch available projects from Citeck.
 
+    Routes through ept_profile if set, otherwise the active profile.
+
     Args:
         fetch: If true, query the Citeck API for all available projects and cache them.
+        profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
     try:
-        # Determine active profile and URL for cache key
-        profile = get_active_profile(config_dir)
-        creds = get_credentials(profile, config_dir)
-        cache_url = creds["url"] if creds else ""
-        cache_key = (profile, cache_url)
+        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
+        cache_url = creds["url"]
+        cache_key = (resolved, cache_url)
 
         # Fetch from API if requested
         if fetch:
@@ -266,7 +298,7 @@ def list_projects(
                 },
                 language="predicate",
                 page={"maxItems": 100},
-                profile=profile,
+                profile=resolved,
                 config_dir=config_dir,
             )
             fetched = []
@@ -282,11 +314,11 @@ def list_projects(
         # Build result using the same profile snapshot
         result = {
             "ok": True,
-            "projects": get_projects(profile=profile, config_dir=config_dir),
-            "default_project": get_default_project(profile=profile, config_dir=config_dir),
+            "projects": get_projects(profile=resolved, config_dir=config_dir),
+            "default_project": get_default_project(profile=resolved, config_dir=config_dir),
         }
 
-        # Include cached fetched projects for the active profile+url
+        # Include cached fetched projects for the resolved profile+url
         cached = _projects_cache.get(cache_key, [])
         if cached:
             result["fetched_projects"] = list(cached)
@@ -303,13 +335,16 @@ def list_projects(
 @mcp.tool
 def set_project_default(
     project: str,
+    profile: str | None = None,
 ) -> dict:
-    """Set the default project for Citeck operations.
+    """Set the default project for Citeck task-tracker operations.
 
     Auto-adds the project to the saved list if not already present.
+    Persisted under ept_profile if set, otherwise the active profile.
 
     Args:
         project: Project key to set as default (e.g. "COREDEV").
+        profile: Override the profile for this call only. Usually leave empty.
     """
     if not project or not project.strip():
         return {"ok": False, "error": "Project key must not be empty"}
@@ -317,12 +352,12 @@ def set_project_default(
     config_dir = _get_config_dir()
 
     try:
-        profile = get_active_profile(config_dir)
-        set_default_project(project, profile=profile, config_dir=config_dir)
+        resolved, _ = resolve_ept_profile(profile=profile, config_dir=config_dir)
+        set_default_project(project, profile=resolved, config_dir=config_dir)
         return {
             "ok": True,
             "default_project": project,
-            "projects": get_projects(profile=profile, config_dir=config_dir),
+            "projects": get_projects(profile=resolved, config_dir=config_dir),
         }
     except ConfigError as e:
         return {"ok": False, "error": str(e)}
@@ -451,8 +486,63 @@ def set_docs_profile(profile: str) -> dict:
             return {"ok": True, "docs_profile": None, "cleared": True}
         lib_set_docs_profile(profile, config_dir)
         creds = get_credentials(profile, config_dir)
-        server = creds["url"].rstrip("/") if creds else None
-        return {"ok": True, "docs_profile": profile, "server": server}
+        return {"ok": True, "docs_profile": profile, "server": creds["url"].rstrip("/")}
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool
+def set_ept_profile(profile: str) -> dict:
+    """Set which credentials profile handles task-tracker (ept) tools.
+
+    Affects search_issues, create_issue, update_issue, list_projects,
+    set_project_default, query_sprints/components/tags/releases, query_comments,
+    and download_attachment. Use this when the task tracker lives on a different
+    environment than the active profile (e.g. production tracker, local for
+    everything else). Pass an empty string to clear the setting and fall back
+    to the active profile.
+
+    Args:
+        profile: Profile name (must already be configured via /citeck:citeck-auth),
+                 or empty string to clear the setting.
+    """
+    config_dir = _get_config_dir()
+    try:
+        if not profile or not profile.strip():
+            clear_ept_profile(config_dir)
+            return {"ok": True, "ept_profile": None, "cleared": True}
+        lib_set_ept_profile(profile, config_dir)
+        creds = get_credentials(profile, config_dir)
+        return {"ok": True, "ept_profile": profile, "server": creds["url"].rstrip("/")}
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool
+def set_records_profile(profile: str) -> dict:
+    """Set which credentials profile handles plain records_query / records_mutate.
+
+    Use this when records queries should run against a different environment
+    than the task tracker (e.g. tracker on production, records on local).
+    Pass an empty string to clear the setting and fall back to the active
+    profile.
+
+    Args:
+        profile: Profile name (must already be configured via /citeck:citeck-auth),
+                 or empty string to clear the setting.
+    """
+    config_dir = _get_config_dir()
+    try:
+        if not profile or not profile.strip():
+            clear_records_profile(config_dir)
+            return {"ok": True, "records_profile": None, "cleared": True}
+        lib_set_records_profile(profile, config_dir)
+        creds = get_credentials(profile, config_dir)
+        return {"ok": True, "records_profile": profile, "server": creds["url"].rstrip("/")}
     except ConfigError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
@@ -463,9 +553,10 @@ def set_docs_profile(profile: str) -> dict:
 def list_profiles() -> dict:
     """List all configured Citeck profiles with non-sensitive metadata.
 
-    Returns the active profile, the docs profile (if set), and a list of
-    profile entries — each with name, url, auth_method, is_active, is_docs.
-    Passwords and client secrets are never returned.
+    Returns the active profile, the specialized profiles (docs/ept/records,
+    if set), and a list of profile entries — each with name, url, auth_method,
+    is_active, is_docs, is_ept, is_records. Passwords and client secrets are
+    never returned.
 
     Use this to see which environments are configured before calling
     set_active_profile (e.g. user says "switch to production" — call this
@@ -475,6 +566,8 @@ def list_profiles() -> dict:
     try:
         active = get_active_profile(config_dir)
         docs = lib_get_docs_profile(config_dir)
+        ept = lib_get_ept_profile(config_dir)
+        records = lib_get_records_profile(config_dir)
         names = get_profiles(config_dir)
         profiles = []
         for name in names:
@@ -486,11 +579,15 @@ def list_profiles() -> dict:
                 "auth_method": creds.get("auth_method"),
                 "is_active": name == active,
                 "is_docs": name == docs,
+                "is_ept": name == ept,
+                "is_records": name == records,
             })
         return {
             "ok": True,
             "active": active,
             "docs_profile": docs,
+            "ept_profile": ept,
+            "records_profile": records,
             "profiles": profiles,
         }
     except ConfigError as e:
@@ -629,8 +726,11 @@ def search_issues(
     sort: str = "_created",
     ascending: bool = False,
     raw_query: dict | None = None,
+    profile: str | None = None,
 ) -> dict:
     """Search issues in Citeck Project Tracker.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     Args:
         project: Project/workspace key (e.g. "COREDEV"). Uses default project if not set.
@@ -642,19 +742,19 @@ def search_issues(
         sort: Sort attribute (default: "_created").
         ascending: Sort ascending (default: false = descending).
         raw_query: Raw predicate query dict — bypasses status/assignee/type/sprint filters.
+        profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
     try:
-        # Snapshot active profile for consistent usage
-        profile = get_active_profile(config_dir)
+        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
 
         # Build query
         if raw_query is not None:
             query = raw_query
         else:
             # Resolve assignee "me" only when using structured filters
-            ok, resolved_assignee = _resolve_assignee(assignee, profile, config_dir)
+            ok, resolved_assignee = _resolve_assignee(assignee, resolved, config_dir)
             if not ok:
                 return {"ok": False, "error": resolved_assignee}
 
@@ -673,7 +773,7 @@ def search_issues(
             )
 
         # Resolve project/workspace
-        proj = project or get_default_project(profile=profile, config_dir=config_dir)
+        proj = project or get_default_project(profile=resolved, config_dir=config_dir)
         workspaces = [proj] if proj else None
 
         sort_by = [{"attribute": sort, "ascending": ascending}]
@@ -686,15 +786,12 @@ def search_issues(
             page={"maxItems": limit},
             sort_by=sort_by,
             workspaces=workspaces,
-            profile=profile,
+            profile=resolved,
             config_dir=config_dir,
         )
 
         records = response.get("records", [])
-        base_url = None
-        creds = get_credentials(profile, config_dir)
-        if creds:
-            base_url = creds["url"].rstrip("/")
+        base_url = creds["url"].rstrip("/")
         issues = _format_issues(records, base_url=base_url)
 
         result = {
@@ -827,8 +924,11 @@ def create_issue(
     components: list[str] | None = None,
     tags: list[str] | None = None,
     preview: bool = True,
+    profile: str | None = None,
 ) -> dict:
     """Create an issue in Citeck Project Tracker.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     IMPORTANT: Always call with preview=true first. Show the FULL preview to the user.
     Get explicit confirmation before calling with preview=false to actually create.
@@ -844,14 +944,14 @@ def create_issue(
         components: List of component references.
         tags: List of tag references.
         preview: If true (default), returns preview without creating. Set false to actually create.
+        profile: Override the profile for this call only. Usually leave empty.
 
     Reporter is auto-set to the current user.
     """
     config_dir = _get_config_dir()
 
     try:
-        # Snapshot active profile for consistent usage
-        profile = get_active_profile(config_dir)
+        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
 
         # Validate required fields
         if not summary:
@@ -863,7 +963,7 @@ def create_issue(
             return {"ok": False, "error": f"Unknown issue type '{type}'. Valid types: {valid}."}
 
         # Resolve project
-        proj_key = project or get_default_project(profile=profile, config_dir=config_dir)
+        proj_key = project or get_default_project(profile=resolved, config_dir=config_dir)
         if not proj_key:
             return {
                 "ok": False,
@@ -872,18 +972,18 @@ def create_issue(
             }
 
         # Resolve assignee "me"
-        ok, resolved_assignee = _resolve_assignee(assignee, profile, config_dir)
+        ok, resolved_assignee = _resolve_assignee(assignee, resolved, config_dir)
         if not ok:
             return {"ok": False, "error": resolved_assignee}
 
         # Resolve reporter (current user)
         try:
-            reporter = get_username(profile=profile, config_dir=config_dir)
+            reporter = get_username(profile=resolved, config_dir=config_dir)
         except Exception:
             reporter = None
 
         # Resolve project info
-        project_ref, workspace_key = _resolve_project_info(proj_key, profile=profile, config_dir=config_dir)
+        project_ref, workspace_key = _resolve_project_info(proj_key, profile=resolved, config_dir=config_dir)
 
         # Build record
         record = _build_create_record(
@@ -901,15 +1001,14 @@ def create_issue(
         )
 
         # Resolve server info for responses
-        creds = get_credentials(profile, config_dir)
-        server_url = creds["url"].rstrip("/") if creds else None
+        server_url = creds["url"].rstrip("/")
 
         # Preview mode
         if preview:
             return {
                 "ok": True,
                 "preview": True,
-                "profile": profile,
+                "profile": resolved,
                 "server": server_url,
                 "record": record,
             }
@@ -918,7 +1017,7 @@ def create_issue(
         result = lib_records_mutate(
             records=[record],
             version=1,
-            profile=profile,
+            profile=resolved,
             config_dir=config_dir,
         )
 
@@ -928,11 +1027,10 @@ def create_issue(
             response = {
                 "ok": True,
                 "id": created_id,
-                "profile": profile,
+                "profile": resolved,
                 "server": server_url,
             }
-            if server_url:
-                response["link"] = f"{server_url}/v2/dashboard?recordRef={created_id}"
+            response["link"] = f"{server_url}/v2/dashboard?recordRef={created_id}"
             return response
         else:
             return {"ok": True, "message": "Issue created."}
@@ -1014,8 +1112,11 @@ def update_issue(
     summary: str | None = None,
     description: str | None = None,
     preview: bool = True,
+    profile: str | None = None,
 ) -> dict:
     """Update an issue in Citeck Project Tracker.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     IMPORTANT: Always call with preview=true first. Show the FULL preview to the user.
     Get explicit confirmation before calling with preview=false to actually update.
@@ -1029,15 +1130,15 @@ def update_issue(
         summary: New summary/title in English.
         description: New description in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
         preview: If true (default), returns preview without updating. Set false to actually update.
+        profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
     try:
-        # Snapshot active profile for consistent usage
-        profile = get_active_profile(config_dir)
+        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
 
         # Resolve assignee "me"
-        ok, resolved_assignee = _resolve_assignee(assignee, profile, config_dir)
+        ok, resolved_assignee = _resolve_assignee(assignee, resolved, config_dir)
         if not ok:
             return {"ok": False, "error": resolved_assignee}
 
@@ -1052,15 +1153,14 @@ def update_issue(
         )
 
         # Resolve server info for responses
-        creds = get_credentials(profile, config_dir)
-        server_url = creds["url"].rstrip("/") if creds else None
+        server_url = creds["url"].rstrip("/")
 
         # Preview mode
         if preview:
             return {
                 "ok": True,
                 "preview": True,
-                "profile": profile,
+                "profile": resolved,
                 "server": server_url,
                 "record": record,
             }
@@ -1069,22 +1169,20 @@ def update_issue(
         result = lib_records_mutate(
             records=[record],
             version=1,
-            profile=profile,
+            profile=resolved,
             config_dir=config_dir,
         )
 
         result_records = result.get("records", [])
         if result_records:
             updated_id = result_records[0].get("id", "unknown")
-            response = {
+            return {
                 "ok": True,
                 "id": updated_id,
-                "profile": profile,
+                "profile": resolved,
                 "server": server_url,
+                "link": f"{server_url}/v2/dashboard?recordRef={updated_id}",
             }
-            if server_url:
-                response["link"] = f"{server_url}/v2/dashboard?recordRef={updated_id}"
-            return response
         else:
             return {"ok": True, "message": "Issue updated."}
 
@@ -1195,16 +1293,16 @@ def _query_metadata(
     status: str | None = None,
     limit: int = 50,
     ascending: bool = False,
+    profile: str | None = None,
 ) -> dict:
     """Generic metadata query for sprints, components, tags, releases."""
     config_dir = _get_config_dir()
     cfg = _METADATA_CONFIGS[entity_type]
 
     try:
-        # Snapshot active profile for consistent usage
-        profile = get_active_profile(config_dir)
+        resolved, _ = resolve_ept_profile(profile=profile, config_dir=config_dir)
 
-        proj = project or get_default_project(profile=profile, config_dir=config_dir)
+        proj = project or get_default_project(profile=resolved, config_dir=config_dir)
         if not proj:
             return {
                 "ok": False,
@@ -1226,7 +1324,7 @@ def _query_metadata(
             page={"maxItems": limit},
             sort_by=[{"attribute": "_created", "ascending": ascending}],
             workspaces=[proj],
-            profile=profile,
+            profile=resolved,
             config_dir=config_dir,
         )
 
@@ -1253,16 +1351,20 @@ def query_sprints(
     status: str | None = None,
     limit: int = 20,
     ascending: bool = False,
+    profile: str | None = None,
 ) -> dict:
     """Query sprints in Citeck Project Tracker.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     Args:
         project: Project/workspace key (e.g. "COREDEV"). Uses default project if not set.
         status: Filter by status (e.g. "new", "in-progress", "completed").
         limit: Max results (default: 20).
         ascending: Sort ascending by creation date (default: false).
+        profile: Override the profile for this call only. Usually leave empty.
     """
-    return _query_metadata("sprints", project=project, status=status, limit=limit, ascending=ascending)
+    return _query_metadata("sprints", project=project, status=status, limit=limit, ascending=ascending, profile=profile)
 
 
 @mcp.tool
@@ -1270,15 +1372,19 @@ def query_components(
     project: str | None = None,
     limit: int = 50,
     ascending: bool = False,
+    profile: str | None = None,
 ) -> dict:
     """Query components in Citeck Project Tracker.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     Args:
         project: Project/workspace key (e.g. "COREDEV"). Uses default project if not set.
         limit: Max results (default: 50).
         ascending: Sort ascending by creation date (default: false).
+        profile: Override the profile for this call only. Usually leave empty.
     """
-    return _query_metadata("components", project=project, limit=limit, ascending=ascending)
+    return _query_metadata("components", project=project, limit=limit, ascending=ascending, profile=profile)
 
 
 @mcp.tool
@@ -1286,15 +1392,19 @@ def query_tags(
     project: str | None = None,
     limit: int = 50,
     ascending: bool = False,
+    profile: str | None = None,
 ) -> dict:
     """Query tags in Citeck Project Tracker.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     Args:
         project: Project/workspace key (e.g. "COREDEV"). Uses default project if not set.
         limit: Max results (default: 50).
         ascending: Sort ascending by creation date (default: false).
+        profile: Override the profile for this call only. Usually leave empty.
     """
-    return _query_metadata("tags", project=project, limit=limit, ascending=ascending)
+    return _query_metadata("tags", project=project, limit=limit, ascending=ascending, profile=profile)
 
 
 @mcp.tool
@@ -1303,16 +1413,20 @@ def query_releases(
     status: str | None = None,
     limit: int = 20,
     ascending: bool = False,
+    profile: str | None = None,
 ) -> dict:
     """Query releases in Citeck Project Tracker.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     Args:
         project: Project/workspace key (e.g. "COREDEV"). Uses default project if not set.
         status: Filter by status (e.g. "new", "in-progress", "completed").
         limit: Max results (default: 20).
         ascending: Sort ascending by creation date (default: false).
+        profile: Override the profile for this call only. Usually leave empty.
     """
-    return _query_metadata("releases", project=project, status=status, limit=limit, ascending=ascending)
+    return _query_metadata("releases", project=project, status=status, limit=limit, ascending=ascending, profile=profile)
 
 
 # --- HTML stripping utility ---
@@ -1441,8 +1555,11 @@ def query_comments(
     record_ref: str,
     limit: int = 50,
     skip_count: int = 0,
+    profile: str | None = None,
 ) -> dict:
     """Fetch comments for a Citeck ECOS record.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     Comments are sorted newest first. The 'text' field is plain text
     (HTML stripped); 'textHtml' preserves the original HTML.
@@ -1454,6 +1571,7 @@ def query_comments(
         record_ref: Full record reference (e.g. "emodel/ept-issue@COREDEV-3703").
         limit: Max comments to return (default: 50).
         skip_count: Number of comments to skip for pagination (default: 0).
+        profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
@@ -1461,7 +1579,7 @@ def query_comments(
         return {"ok": False, "error": "record_ref must not be empty."}
 
     try:
-        profile = get_active_profile(config_dir)
+        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
 
         response = lib_records_query(
             source_id=_COMMENT_SOURCE_ID,
@@ -1470,47 +1588,39 @@ def query_comments(
             language="predicate",
             page={"skipCount": skip_count, "maxItems": limit},
             sort_by=[{"attribute": "_created", "ascending": False}],
-            profile=profile,
+            profile=resolved,
             config_dir=config_dir,
         )
 
         records = response.get("records", [])
-        base_url = None
-        creds = get_credentials(profile, config_dir)
-        if creds:
-            base_url = creds["url"].rstrip("/")
+        base_url = creds["url"].rstrip("/")
         comments = _format_comments(records, base_url=base_url)
 
         # Auto-download images from comments and replace URLs with local paths
-        if base_url:
-            try:
-                auth_header = get_auth_header(profile=profile, config_dir=config_dir)
-                for comment in comments:
-                    images = []
-                    html = comment.get("textHtml", "")
-                    for img in comment.pop("_image_info", []):
-                        img_url = img["url"]
-                        raw_src = img["src"]
-                        try:
-                            dl = _download_file(img_url, auth_header, base_url, config_dir)
-                            images.append({"url": img_url, "path": dl["path"], "content_type": dl["content_type"]})
-                            if dl["path"] and html:
-                                # Try both decoded src and HTML-encoded version
-                                html = html.replace(raw_src, dl["path"])
-                                html_encoded_src = raw_src.replace("&", "&amp;")
-                                if html_encoded_src != raw_src:
-                                    html = html.replace(html_encoded_src, dl["path"])
-                        except Exception:
-                            images.append({"url": img_url, "path": None, "error": "download failed"})
-                    comment["images"] = images
-                    if html != comment.get("textHtml", ""):
-                        comment["textHtml"] = html
-            except Exception:
-                # Auth failed — leave images empty, comments are still useful
-                for comment in comments:
-                    comment.pop("_image_info", None)
-                    comment["images"] = []
-        else:
+        try:
+            auth_header = get_auth_header(profile=resolved, config_dir=config_dir)
+            for comment in comments:
+                images = []
+                html = comment.get("textHtml", "")
+                for img in comment.pop("_image_info", []):
+                    img_url = img["url"]
+                    raw_src = img["src"]
+                    try:
+                        dl = _download_file(img_url, auth_header, base_url, config_dir)
+                        images.append({"url": img_url, "path": dl["path"], "content_type": dl["content_type"]})
+                        if dl["path"] and html:
+                            # Try both decoded src and HTML-encoded version
+                            html = html.replace(raw_src, dl["path"])
+                            html_encoded_src = raw_src.replace("&", "&amp;")
+                            if html_encoded_src != raw_src:
+                                html = html.replace(html_encoded_src, dl["path"])
+                    except Exception:
+                        images.append({"url": img_url, "path": None, "error": "download failed"})
+                comment["images"] = images
+                if html != comment.get("textHtml", ""):
+                    comment["textHtml"] = html
+        except Exception:
+            # Auth failed — leave images empty, comments are still useful
             for comment in comments:
                 comment.pop("_image_info", None)
                 comment["images"] = []
@@ -1526,6 +1636,8 @@ def query_comments(
             result["hasMore"] = response["hasMore"]
         return result
 
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
     except RecordsApiError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
@@ -1571,8 +1683,11 @@ def _download_file(url: str, auth_header: str, base_url: str, config_dir: str | 
 @mcp.tool
 def download_attachment(
     url: str,
+    profile: str | None = None,
 ) -> dict:
     """Download a file from Citeck via authenticated session and return its local path.
+
+    Routes through ept_profile if set, otherwise the active profile.
 
     Saves the file to ~/.citeck/downloads/. Use the Read tool with the returned
     path to view the file contents. Supports images, PDFs, and other binary files.
@@ -1580,6 +1695,7 @@ def download_attachment(
     Args:
         url: Attachment URL — absolute (https://...) or relative (/gateway/...).
              Relative URLs are resolved against the configured Citeck base URL.
+        profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
@@ -1587,17 +1703,9 @@ def download_attachment(
         return {"ok": False, "error": "url must not be empty."}
 
     try:
-        profile = get_active_profile(config_dir)
-        creds = get_credentials(profile, config_dir)
-        if creds is None:
-            return {
-                "ok": False,
-                "error": f"No credentials found for profile '{profile}'. "
-                         "Run 'citeck:citeck-auth' to configure.",
-            }
-
+        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
         base_url = creds["url"].rstrip("/")
-        auth_header = get_auth_header(profile=profile, config_dir=config_dir)
+        auth_header = get_auth_header(profile=resolved, config_dir=config_dir)
         result = _download_file(url, auth_header, base_url, config_dir)
         return {"ok": True, **result}
 

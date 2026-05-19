@@ -32,8 +32,10 @@ No build step. No linter config in the repo (ruff is used externally).
 MCP Server (FastMCP, persistent process)
   └── provides tools: ping, test_connection, records_query, records_mutate,
       list_projects, set_project_default, list_profiles, set_active_profile,
+      set_docs_profile, set_ept_profile, set_records_profile,
       search_issues, create_issue, update_issue, query_sprints,
-      query_components, query_tags, query_releases
+      query_components, query_tags, query_releases, query_comments,
+      download_attachment, search_docs
   └── imports shared modules from lib/
 Skills (user-invocable via /citeck:<name>)
   └── citeck-auth: PKCE browser flow (runs Python scripts)

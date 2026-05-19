@@ -229,21 +229,24 @@ async def test_list_projects_fetch_cache_keyed_by_profile(client: Client):
         ],
     }
 
+    default_creds = ("default", {"url": "http://localhost"})
+    staging_creds = ("staging", {"url": "http://staging"})
+
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
         # Fetch with default profile
         with patch("servers.citeck_mcp.lib_records_query", return_value=mock_response_default), \
-             patch("servers.citeck_mcp.get_active_profile", return_value="default"):
+             patch("servers.citeck_mcp.resolve_ept_profile", return_value=default_creds):
             await client.call_tool("list_projects", {"fetch": True})
 
         # Fetch with staging profile
         with patch("servers.citeck_mcp.lib_records_query", return_value=mock_response_staging), \
-             patch("servers.citeck_mcp.get_active_profile", return_value="staging"):
+             patch("servers.citeck_mcp.resolve_ept_profile", return_value=staging_creds):
             await client.call_tool("list_projects", {"fetch": True})
 
         # Verify each profile has its own cached data
-        with patch("servers.citeck_mcp.get_active_profile", return_value="default"):
+        with patch("servers.citeck_mcp.resolve_ept_profile", return_value=default_creds):
             result_default = await client.call_tool("list_projects", {})
-        with patch("servers.citeck_mcp.get_active_profile", return_value="staging"):
+        with patch("servers.citeck_mcp.resolve_ept_profile", return_value=staging_creds):
             result_staging = await client.call_tool("list_projects", {})
 
     # Default profile: fetched_projects, saved projects, and default_project all from "default"
@@ -286,32 +289,34 @@ async def test_set_project_default_empty_key(client: Client):
     assert "empty" in result_whitespace.data["error"].lower()
 
 
-async def test_set_project_default_uses_profile_snapshot(client: Client):
-    """set_project_default passes the snapshotted profile to config functions."""
+async def test_set_project_default_uses_resolved_profile(client: Client):
+    """set_project_default writes under the ept-resolved profile."""
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
     add_project("PROJ1", profile="default", config_dir=config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
-         patch("servers.citeck_mcp.get_active_profile", return_value="default") as mock_profile, \
+         patch("servers.citeck_mcp.resolve_ept_profile",
+               return_value=("default", {"url": "http://localhost"})) as mock_resolve, \
          patch("servers.citeck_mcp.set_default_project") as mock_set, \
          patch("servers.citeck_mcp.get_projects", return_value=["PROJ1"]) as mock_get:
         await client.call_tool("set_project_default", {"project": "PROJ1"})
 
-    mock_profile.assert_called_once_with(config_dir)
+    mock_resolve.assert_called_once_with(profile=None, config_dir=config_dir)
     mock_set.assert_called_once_with("PROJ1", profile="default", config_dir=config_dir)
     mock_get.assert_called_once_with(profile="default", config_dir=config_dir)
 
 
 async def test_list_projects_fetch_forwards_profile_to_api(client: Client):
-    """list_projects passes the snapshotted profile to lib_records_query."""
+    """list_projects passes the ept-resolved profile to lib_records_query."""
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
 
     mock_response = {"records": []}
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
-         patch("servers.citeck_mcp.get_active_profile", return_value="default"), \
+         patch("servers.citeck_mcp.resolve_ept_profile",
+               return_value=("default", {"url": "http://localhost"})), \
          patch("servers.citeck_mcp.lib_records_query", return_value=mock_response) as mock_query:
         await client.call_tool("list_projects", {"fetch": True})
 

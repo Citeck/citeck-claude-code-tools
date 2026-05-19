@@ -140,6 +140,18 @@ Run `switch_profile.py --list` to check if profiles already exist.
 
    Only suggest "Yes" if this profile plausibly hosts the citeck-docs RAG index (typically a production or shared server, not an empty local instance). If confirmed, call `mcp__citeck__set_docs_profile(profile: "<name>")`.
 
+9. **Optional: mark this profile as the task-tracker source.** Ask via AskUserQuestion:
+   > **Use this profile for task-tracker tools (search_issues, create_issue, query_comments, etc.)?**
+   > Options: "Yes", "No"
+
+   Suggest "Yes" when the user typically works with the tracker on this environment but may run records queries elsewhere (e.g. tracker on production, records on local). If confirmed, call `mcp__citeck__set_ept_profile(profile: "<name>")`.
+
+10. **Optional: mark this profile for plain records queries.** Ask via AskUserQuestion:
+    > **Use this profile for plain `records_query` / `records_mutate`?**
+    > Options: "Yes", "No"
+
+    Suggest "Yes" when the user typically runs records queries on this environment but uses the tracker elsewhere. If confirmed, call `mcp__citeck__set_records_profile(profile: "<name>")`.
+
 ## Re-authentication
 
 When a PKCE session expires (both access and refresh tokens), skills will report a `ReauthenticationRequired` error. In that case, re-run this skill to authenticate again via browser.
@@ -155,7 +167,7 @@ Profile entries include discovered OIDC metadata:
 - `token_endpoint` — Full URL to the OIDC token endpoint
 - `authorization_endpoint` — Full URL to the OIDC authorization endpoint
 
-A top-level `docs_profile` field (separate from `active_profile`) picks which profile handles citeck-docs RAG search. If unset, docs search falls back to the active profile.
+Top-level fields `docs_profile`, `ept_profile`, and `records_profile` (each separate from `active_profile`) route specific tool groups to a chosen profile. If unset, each falls back to the active profile. See plugin README for the full mapping.
 
 If you need to verify permissions manually:
 ```bash

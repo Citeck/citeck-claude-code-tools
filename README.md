@@ -107,8 +107,10 @@ The plugin provides an MCP server with the following tools, available as `mcp__c
 | `query_releases` | List releases for a project |
 | `search_docs` | Semantic search over Citeck documentation (citeck-docs RAG) |
 | `set_docs_profile` | Set the profile used for documentation search |
+| `set_ept_profile` | Set the profile used for task-tracker tools (issues, projects, comments, attachments) |
+| `set_records_profile` | Set the profile used for plain `records_query` / `records_mutate` |
 | `list_profiles` | List configured Citeck profiles with non-sensitive metadata |
-| `set_active_profile` | Switch the active profile (used by all records and issue tools) |
+| `set_active_profile` | Switch the active profile (used as fallback by every tool group) |
 
 ### Skills
 
@@ -168,6 +170,25 @@ Ask a question about the Citeck ECOS platform — semantic search over `citeck-d
 ```
 
 The RAG service is reached via the profile set as `docs_profile` in `~/.citeck/credentials.json` (falls back to the active profile). Switch it with the `set_docs_profile` MCP tool if needed.
+
+### Specialized profiles
+
+Tool groups can be routed to different environments independently of the active profile:
+
+| Setting | Tools it affects | MCP tool |
+|---------|-----------------|----------|
+| `docs_profile` | `search_docs` | `set_docs_profile` |
+| `ept_profile` | `search_issues`, `create_issue`, `update_issue`, `list_projects`, `set_project_default`, `query_sprints`/`components`/`tags`/`releases`, `query_comments`, `download_attachment` | `set_ept_profile` |
+| `records_profile` | `records_query`, `records_mutate` | `set_records_profile` |
+
+Each setting falls back to `active_profile` when unset. Typical use case: task tracker lives on production but records queries should run against a local Citeck.
+
+```
+set_ept_profile(profile="prod")
+set_records_profile(profile="local")
+```
+
+Pass an empty string to clear a setting. Each affected tool also accepts a per-call `profile` argument for one-off overrides.
 
 ### Shared Library
 
