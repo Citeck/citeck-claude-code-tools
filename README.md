@@ -107,6 +107,8 @@ The plugin provides an MCP server with the following tools, available as `mcp__c
 | `query_releases` | List releases for a project |
 | `search_docs` | Semantic search over Citeck documentation (citeck-docs RAG) |
 | `set_docs_profile` | Set the profile used for documentation search |
+| `list_profiles` | List configured Citeck profiles with non-sensitive metadata |
+| `set_active_profile` | Switch the active profile (used by all records and issue tools) |
 
 ### Skills
 

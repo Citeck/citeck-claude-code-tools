@@ -58,6 +58,7 @@ async def test_test_connection_success(client: Client):
     assert data["method"] == "oidc"
     assert data["username"] == "admin"
     assert data["url"] == "http://localhost"
+    assert data["profile"] == "default"
 
 
 async def test_test_connection_auth_failure(client: Client):

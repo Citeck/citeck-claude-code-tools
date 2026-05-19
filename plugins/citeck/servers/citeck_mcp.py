@@ -18,7 +18,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from lib.auth import AuthError, get_auth_header, validate_connection, get_username
 from lib.config import (
-    get_credentials, get_active_profile,
+    get_credentials, get_active_profile, get_profiles,
+    set_active_profile as lib_set_active_profile,
     get_projects, get_default_project, set_default_project,
     get_docs_profile as lib_get_docs_profile,
     set_docs_profile as lib_set_docs_profile,
@@ -78,7 +79,10 @@ mcp = FastMCP(
         "3. If comments contain images (non-empty 'images' list with 'path' values), "
         "AUTOMATICALLY read each downloaded file with the Read tool to understand "
         "screenshots and visual context. Do this without asking the user — images "
-        "in bug reports are essential for understanding the issue."
+        "in bug reports are essential for understanding the issue.\n\n"
+        "Multiple environments are supported via profiles. Use list_profiles to see "
+        "configured environments and set_active_profile to switch between them — "
+        "do NOT ask the user to invoke /citeck:citeck-auth just to switch."
     ),
 )
 
@@ -118,6 +122,7 @@ def test_connection() -> dict:
             username = get_username(profile=profile, config_dir=config_dir)
             result["username"] = username
             result["url"] = creds["url"]
+            result["profile"] = profile
 
         return result
     except AuthError as e:
@@ -448,6 +453,75 @@ def set_docs_profile(profile: str) -> dict:
         creds = get_credentials(profile, config_dir)
         server = creds["url"].rstrip("/") if creds else None
         return {"ok": True, "docs_profile": profile, "server": server}
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool
+def list_profiles() -> dict:
+    """List all configured Citeck profiles with non-sensitive metadata.
+
+    Returns the active profile, the docs profile (if set), and a list of
+    profile entries — each with name, url, auth_method, is_active, is_docs.
+    Passwords and client secrets are never returned.
+
+    Use this to see which environments are configured before calling
+    set_active_profile (e.g. user says "switch to production" — call this
+    first to find the matching profile by name or url).
+    """
+    config_dir = _get_config_dir()
+    try:
+        active = get_active_profile(config_dir)
+        docs = lib_get_docs_profile(config_dir)
+        names = get_profiles(config_dir)
+        profiles = []
+        for name in names:
+            creds = get_credentials(name, config_dir) or {}
+            # Explicit whitelist — `creds` also contains password/client_secret.
+            profiles.append({
+                "name": name,
+                "url": creds.get("url"),
+                "auth_method": creds.get("auth_method"),
+                "is_active": name == active,
+                "is_docs": name == docs,
+            })
+        return {
+            "ok": True,
+            "active": active,
+            "docs_profile": docs,
+            "profiles": profiles,
+        }
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool
+def set_active_profile(profile: str) -> dict:
+    """Switch the active Citeck profile (used by all records and issue tools).
+
+    The profile must already be configured via /citeck:citeck-auth — this only
+    switches between existing profiles, it cannot create new ones. Call
+    list_profiles first to see what's configured.
+
+    Args:
+        profile: Profile name to activate (e.g. "prod", "local").
+    """
+    config_dir = _get_config_dir()
+    if not profile or not profile.strip():
+        return {"ok": False, "error": "Profile name is required"}
+    try:
+        lib_set_active_profile(profile, config_dir)
+        creds = get_credentials(profile, config_dir) or {}
+        return {
+            "ok": True,
+            "active_profile": profile,
+            "server": creds.get("url"),
+            "auth_method": creds.get("auth_method"),
+        }
     except ConfigError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
