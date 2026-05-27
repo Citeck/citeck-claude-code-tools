@@ -61,7 +61,7 @@ async def test_update_issue_preview_mode(client: Client):
     record = data["record"]
     assert record["id"] == "emodel/ept-issue@COREDEV-42"
     attrs = record["attributes"]
-    assert attrs["_state?str"] == "in-progress"
+    assert attrs["_status?str"] == "in-progress"
     assert attrs["_workspace?str"] == "COREDEV"
 
 
@@ -95,7 +95,7 @@ async def test_update_issue_actual_update(client: Client):
     records = call_args[1]["records"]
     assert len(records) == 1
     assert records[0]["id"] == "emodel/ept-issue@COREDEV-42"
-    assert records[0]["attributes"]["_state?str"] == "done"
+    assert records[0]["attributes"]["_status?str"] == "done"
     assert records[0]["attributes"]["_workspace?str"] == "COREDEV"
 
 
@@ -222,7 +222,7 @@ async def test_update_issue_multiple_fields(client: Client):
     data = result.data
     assert data["ok"] is True
     attrs = data["record"]["attributes"]
-    assert attrs["_state?str"] == "in-progress"
+    assert attrs["_status?str"] == "in-progress"
     assert attrs["priority?str"] == "100_critical"
     assert attrs["summary?str"] == "Updated summary"
     assert attrs["description?str"] == "Updated description"
@@ -246,3 +246,46 @@ async def test_update_issue_api_error(client: Client):
     data = result.data
     assert data["ok"] is False
     assert "500" in data["error"]
+
+
+async def test_update_issue_releases(client: Client):
+    """update_issue maps fix_in_version/affected_versions to release assoc arrays."""
+    config_dir = tempfile.mkdtemp()
+    _setup_credentials(config_dir)
+
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("update_issue", {
+            "issue": "COREDEV-42",
+            "fix_in_version": ["rel-100"],
+            "affected_versions": ["rel-90", "rel-91"],
+            "preview": True,
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    attrs = data["record"]["attributes"]
+    assert attrs["fixInVersion?assoc"] == ["emodel/ecos-release-type@rel-100"]
+    assert attrs["affectedVersions?assoc"] == [
+        "emodel/ecos-release-type@rel-90",
+        "emodel/ecos-release-type@rel-91",
+    ]
+    assert attrs["_workspace?str"] == "COREDEV"
+
+
+async def test_update_issue_release_full_ref_preserved(client: Client):
+    """update_issue keeps already-prefixed release refs as-is."""
+    config_dir = tempfile.mkdtemp()
+    _setup_credentials(config_dir)
+
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("update_issue", {
+            "issue": "COREDEV-42",
+            "fix_in_version": ["emodel/ecos-release-type@rel-200"],
+            "preview": True,
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    assert data["record"]["attributes"]["fixInVersion?assoc"] == [
+        "emodel/ecos-release-type@rel-200",
+    ]

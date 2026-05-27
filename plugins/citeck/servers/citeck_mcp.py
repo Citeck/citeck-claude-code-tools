@@ -626,6 +626,17 @@ def set_active_profile(profile: str) -> dict:
 
 
 _ISSUE_SOURCE_ID = "emodel/ept-issue"
+_RELEASE_SOURCE_ID = "emodel/ecos-release-type"
+
+
+def _release_refs(values: list[str]) -> list[str]:
+    """Prefix bare release ids with the release source ref."""
+    refs = []
+    for v in values:
+        if not v.startswith(f"{_RELEASE_SOURCE_ID}@"):
+            v = f"{_RELEASE_SOURCE_ID}@{v}"
+        refs.append(v)
+    return refs
 
 
 def _resolve_assignee(assignee: str | None, profile: str | None, config_dir: str | None) -> tuple[bool, str | None]:
@@ -863,6 +874,8 @@ def _build_create_record(
     sprint: str | None = None,
     components: list[str] | None = None,
     tags: list[str] | None = None,
+    fix_in_version: list[str] | None = None,
+    affected_versions: list[str] | None = None,
 ) -> dict:
     """Build a mutation record for issue creation."""
     attributes = {
@@ -906,6 +919,12 @@ def _build_create_record(
             refs.append(t)
         attributes["tags?assoc"] = refs
 
+    if fix_in_version:
+        attributes["fixInVersion?assoc"] = _release_refs(fix_in_version)
+
+    if affected_versions:
+        attributes["affectedVersions?assoc"] = _release_refs(affected_versions)
+
     return {
         "id": f"{_ISSUE_SOURCE_ID}@",
         "attributes": attributes,
@@ -923,6 +942,8 @@ def create_issue(
     sprint: str | None = None,
     components: list[str] | None = None,
     tags: list[str] | None = None,
+    fix_in_version: list[str] | None = None,
+    affected_versions: list[str] | None = None,
     preview: bool = True,
     profile: str | None = None,
 ) -> dict:
@@ -943,6 +964,8 @@ def create_issue(
         sprint: Sprint reference (UUID or full ref).
         components: List of component references.
         tags: List of tag references.
+        fix_in_version: Target releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Use query_releases to find them.
+        affected_versions: Affected releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Use query_releases to find them.
         preview: If true (default), returns preview without creating. Set false to actually create.
         profile: Override the profile for this call only. Usually leave empty.
 
@@ -998,6 +1021,8 @@ def create_issue(
             sprint=sprint,
             components=components,
             tags=tags,
+            fix_in_version=fix_in_version,
+            affected_versions=affected_versions,
         )
 
         # Resolve server info for responses
@@ -1072,12 +1097,14 @@ def _build_update_record(
     priority: str | None = None,
     summary: str | None = None,
     description: str | None = None,
+    fix_in_version: list[str] | None = None,
+    affected_versions: list[str] | None = None,
 ) -> dict:
     """Build a mutation record for issue update."""
     attributes: dict = {}
 
     if status is not None:
-        attributes["_state?str"] = status
+        attributes["_status?str"] = status
     if assignee is not None:
         if not assignee.startswith("emodel/person@"):
             assignee = f"emodel/person@{assignee}"
@@ -1088,11 +1115,16 @@ def _build_update_record(
         attributes["summary?str"] = summary
     if description is not None:
         attributes["description?str"] = description
+    if fix_in_version is not None:
+        attributes["fixInVersion?assoc"] = _release_refs(fix_in_version)
+    if affected_versions is not None:
+        attributes["affectedVersions?assoc"] = _release_refs(affected_versions)
 
     if not attributes:
         raise ValueError(
             "No attributes to update. Specify at least one of: "
-            "status, assignee, priority, summary, description."
+            "status, assignee, priority, summary, description, "
+            "fix_in_version, affected_versions."
         )
 
     attributes["_workspace?str"] = _resolve_workspace_from_issue(issue_id)
@@ -1111,6 +1143,8 @@ def update_issue(
     priority: str | None = None,
     summary: str | None = None,
     description: str | None = None,
+    fix_in_version: list[str] | None = None,
+    affected_versions: list[str] | None = None,
     preview: bool = True,
     profile: str | None = None,
 ) -> dict:
@@ -1129,6 +1163,8 @@ def update_issue(
         priority: New priority (e.g. "100_critical", "200_high", "300_medium", "400_low").
         summary: New summary/title in English.
         description: New description in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
+        fix_in_version: Target releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Replaces the current value. Use query_releases to find them.
+        affected_versions: Affected releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Replaces the current value. Use query_releases to find them.
         preview: If true (default), returns preview without updating. Set false to actually update.
         profile: Override the profile for this call only. Usually leave empty.
     """
@@ -1150,6 +1186,8 @@ def update_issue(
             priority=priority,
             summary=summary,
             description=description,
+            fix_in_version=fix_in_version,
+            affected_versions=affected_versions,
         )
 
         # Resolve server info for responses

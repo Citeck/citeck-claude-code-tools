@@ -474,6 +474,42 @@ async def test_create_issue_with_components_and_tags(client: Client):
     ]
 
 
+async def test_create_issue_with_releases(client: Client):
+    """create_issue sets target/affected releases with proper ref prefixes."""
+    config_dir = tempfile.mkdtemp()
+    _setup_with_default_project(config_dir)
+
+    mock_query_response = {
+        "records": [{"attributes": {"id": "emodel/project@uuid"}}],
+    }
+    mock_load_response = {
+        "records": [{"attributes": {"?json": {"key": "COREDEV"}}}],
+    }
+
+    with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
+         patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("create_issue", {
+            "project": "COREDEV",
+            "type": "bug",
+            "summary": "Bug with releases",
+            "fix_in_version": ["rel-uuid1", "emodel/ecos-release-type@rel-uuid2"],
+            "affected_versions": ["rel-uuid0"],
+            "preview": True,
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    attrs = data["record"]["attributes"]
+    assert attrs["fixInVersion?assoc"] == [
+        "emodel/ecos-release-type@rel-uuid1",
+        "emodel/ecos-release-type@rel-uuid2",
+    ]
+    assert attrs["affectedVersions?assoc"] == [
+        "emodel/ecos-release-type@rel-uuid0",
+    ]
+
+
 async def test_create_issue_default_priority(client: Client):
     """create_issue uses 300_medium as default priority."""
     config_dir = tempfile.mkdtemp()
