@@ -639,6 +639,23 @@ def _release_refs(values: list[str]) -> list[str]:
     return refs
 
 
+def _issue_refs(values: list[str]) -> list[str]:
+    """Prefix bare issue keys with the issue source ref (e.g. 'COREDEV-1' -> 'emodel/ept-issue@COREDEV-1')."""
+    refs = []
+    for v in values:
+        if not v.startswith(f"{_ISSUE_SOURCE_ID}@"):
+            v = f"{_ISSUE_SOURCE_ID}@{v}"
+        refs.append(v)
+    return refs
+
+
+def _issue_ref(value: str) -> str:
+    """Prefix a bare issue key with the issue source ref. For single-valued epic link etc."""
+    if value.startswith(f"{_ISSUE_SOURCE_ID}@"):
+        return value
+    return f"{_ISSUE_SOURCE_ID}@{value}"
+
+
 def _resolve_assignee(assignee: str | None, profile: str | None, config_dir: str | None) -> tuple[bool, str | None]:
     """Resolve assignee='me' to the current username. Returns (ok, value_or_error)."""
     if assignee != "me":
@@ -876,6 +893,12 @@ def _build_create_record(
     tags: list[str] | None = None,
     fix_in_version: list[str] | None = None,
     affected_versions: list[str] | None = None,
+    epic: str | None = None,
+    links_relates: list[str] | None = None,
+    links_blocker: list[str] | None = None,
+    links_duplicate: list[str] | None = None,
+    links_clone: list[str] | None = None,
+    links_problem: list[str] | None = None,
 ) -> dict:
     """Build a mutation record for issue creation."""
     attributes = {
@@ -925,6 +948,20 @@ def _build_create_record(
     if affected_versions:
         attributes["affectedVersions?assoc"] = _release_refs(affected_versions)
 
+    if epic:
+        attributes["epicLink?str"] = _issue_ref(epic)
+
+    if links_relates:
+        attributes["issue-links:relates?assoc"] = _issue_refs(links_relates)
+    if links_blocker:
+        attributes["issue-links:blocker?assoc"] = _issue_refs(links_blocker)
+    if links_duplicate:
+        attributes["issue-links:duplicate?assoc"] = _issue_refs(links_duplicate)
+    if links_clone:
+        attributes["issue-links:clone?assoc"] = _issue_refs(links_clone)
+    if links_problem:
+        attributes["issue-links:problem?assoc"] = _issue_refs(links_problem)
+
     return {
         "id": f"{_ISSUE_SOURCE_ID}@",
         "attributes": attributes,
@@ -944,6 +981,12 @@ def create_issue(
     tags: list[str] | None = None,
     fix_in_version: list[str] | None = None,
     affected_versions: list[str] | None = None,
+    epic: str | None = None,
+    links_relates: list[str] | None = None,
+    links_blocker: list[str] | None = None,
+    links_duplicate: list[str] | None = None,
+    links_clone: list[str] | None = None,
+    links_problem: list[str] | None = None,
     preview: bool = True,
     profile: str | None = None,
 ) -> dict:
@@ -966,6 +1009,12 @@ def create_issue(
         tags: List of tag references.
         fix_in_version: Target releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Use query_releases to find them.
         affected_versions: Affected releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Use query_releases to find them.
+        epic: Epic link — single issue reference (PROJECT-N key or full "emodel/ept-issue@" ref) pointing to an epic issue.
+        links_relates: Issue links of type "relates to" — list of issue references (PROJECT-N keys or full "emodel/ept-issue@" refs).
+        links_blocker: Issue links of type "is blocked by" — list of issue references.
+        links_duplicate: Issue links of type "duplicates" — list of issue references.
+        links_clone: Issue links of type "is cloned from" — list of issue references.
+        links_problem: Issue links of type "is caused by" / problem — list of issue references.
         preview: If true (default), returns preview without creating. Set false to actually create.
         profile: Override the profile for this call only. Usually leave empty.
 
@@ -1023,6 +1072,12 @@ def create_issue(
             tags=tags,
             fix_in_version=fix_in_version,
             affected_versions=affected_versions,
+            epic=epic,
+            links_relates=links_relates,
+            links_blocker=links_blocker,
+            links_duplicate=links_duplicate,
+            links_clone=links_clone,
+            links_problem=links_problem,
         )
 
         # Resolve server info for responses
@@ -1099,6 +1154,12 @@ def _build_update_record(
     description: str | None = None,
     fix_in_version: list[str] | None = None,
     affected_versions: list[str] | None = None,
+    epic: str | None = None,
+    links_relates: list[str] | None = None,
+    links_blocker: list[str] | None = None,
+    links_duplicate: list[str] | None = None,
+    links_clone: list[str] | None = None,
+    links_problem: list[str] | None = None,
 ) -> dict:
     """Build a mutation record for issue update."""
     attributes: dict = {}
@@ -1119,12 +1180,26 @@ def _build_update_record(
         attributes["fixInVersion?assoc"] = _release_refs(fix_in_version)
     if affected_versions is not None:
         attributes["affectedVersions?assoc"] = _release_refs(affected_versions)
+    if epic is not None:
+        attributes["epicLink?str"] = _issue_ref(epic) if epic else ""
+    if links_relates is not None:
+        attributes["issue-links:relates?assoc"] = _issue_refs(links_relates)
+    if links_blocker is not None:
+        attributes["issue-links:blocker?assoc"] = _issue_refs(links_blocker)
+    if links_duplicate is not None:
+        attributes["issue-links:duplicate?assoc"] = _issue_refs(links_duplicate)
+    if links_clone is not None:
+        attributes["issue-links:clone?assoc"] = _issue_refs(links_clone)
+    if links_problem is not None:
+        attributes["issue-links:problem?assoc"] = _issue_refs(links_problem)
 
     if not attributes:
         raise ValueError(
             "No attributes to update. Specify at least one of: "
             "status, assignee, priority, summary, description, "
-            "fix_in_version, affected_versions."
+            "fix_in_version, affected_versions, epic, "
+            "links_relates, links_blocker, links_duplicate, "
+            "links_clone, links_problem."
         )
 
     attributes["_workspace?str"] = _resolve_workspace_from_issue(issue_id)
@@ -1145,6 +1220,12 @@ def update_issue(
     description: str | None = None,
     fix_in_version: list[str] | None = None,
     affected_versions: list[str] | None = None,
+    epic: str | None = None,
+    links_relates: list[str] | None = None,
+    links_blocker: list[str] | None = None,
+    links_duplicate: list[str] | None = None,
+    links_clone: list[str] | None = None,
+    links_problem: list[str] | None = None,
     preview: bool = True,
     profile: str | None = None,
 ) -> dict:
@@ -1165,6 +1246,12 @@ def update_issue(
         description: New description in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
         fix_in_version: Target releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Replaces the current value. Use query_releases to find them.
         affected_versions: Affected releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Replaces the current value. Use query_releases to find them.
+        epic: Epic link — single issue reference (PROJECT-N key or full "emodel/ept-issue@" ref). Pass empty string to clear.
+        links_relates: Issue links of type "relates to" — list of issue references. Replaces the current value (empty list clears).
+        links_blocker: Issue links of type "is blocked by" — list of issue references. Replaces the current value.
+        links_duplicate: Issue links of type "duplicates" — list of issue references. Replaces the current value.
+        links_clone: Issue links of type "is cloned from" — list of issue references. Replaces the current value.
+        links_problem: Issue links of type "is caused by" / problem — list of issue references. Replaces the current value.
         preview: If true (default), returns preview without updating. Set false to actually update.
         profile: Override the profile for this call only. Usually leave empty.
     """
@@ -1188,6 +1275,12 @@ def update_issue(
             description=description,
             fix_in_version=fix_in_version,
             affected_versions=affected_versions,
+            epic=epic,
+            links_relates=links_relates,
+            links_blocker=links_blocker,
+            links_duplicate=links_duplicate,
+            links_clone=links_clone,
+            links_problem=links_problem,
         )
 
         # Resolve server info for responses
@@ -1674,6 +1767,90 @@ def query_comments(
             result["hasMore"] = response["hasMore"]
         return result
 
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except RecordsApiError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+def _build_comment_record(issue_id: str, text: str) -> dict:
+    """Build a mutation record for adding a comment to an issue."""
+    return {
+        "id": f"{_COMMENT_SOURCE_ID}@",
+        "attributes": {
+            "text?str": text,
+            "record?str": _issue_ref(issue_id),
+            "_workspace?str": _resolve_workspace_from_issue(issue_id),
+        },
+    }
+
+
+@mcp.tool
+def add_comment(
+    issue: str,
+    text: str,
+    preview: bool = True,
+    profile: str | None = None,
+) -> dict:
+    """Add a comment to an issue in Citeck Project Tracker.
+
+    Routes through ept_profile if set, otherwise the active profile.
+
+    IMPORTANT: Always call with preview=true first. Show the FULL preview to the user.
+    Get explicit confirmation before calling with preview=false to actually post.
+
+    Args:
+        issue: Issue ID (e.g. "COREDEV-42") or full record ref with PROJECT-NUMBER local ID
+               (e.g. "emodel/ept-issue@COREDEV-42"). UUID-based refs are not supported.
+        text: Comment body in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
+        preview: If true (default), returns preview without posting. Set false to actually post.
+        profile: Override the profile for this call only. Usually leave empty.
+    """
+    config_dir = _get_config_dir()
+
+    try:
+        if not text or not text.strip():
+            return {"ok": False, "error": "Comment text is required."}
+
+        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
+
+        record = _build_comment_record(issue_id=issue, text=text)
+
+        server_url = creds["url"].rstrip("/")
+
+        if preview:
+            return {
+                "ok": True,
+                "preview": True,
+                "profile": resolved,
+                "server": server_url,
+                "record": record,
+            }
+
+        result = lib_records_mutate(
+            records=[record],
+            version=1,
+            profile=resolved,
+            config_dir=config_dir,
+        )
+
+        result_records = result.get("records", [])
+        issue_ref = _issue_ref(issue)
+        response: dict = {
+            "ok": True,
+            "profile": resolved,
+            "server": server_url,
+            "issue": issue_ref,
+            "link": f"{server_url}/v2/dashboard?recordRef={issue_ref}",
+        }
+        if result_records:
+            response["id"] = result_records[0].get("id", "unknown")
+        return response
+
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     except ConfigError as e:
         return {"ok": False, "error": str(e)}
     except RecordsApiError as e:

@@ -510,6 +510,48 @@ async def test_create_issue_with_releases(client: Client):
     ]
 
 
+async def test_create_issue_with_epic_and_links(client: Client):
+    """create_issue sets epic link and issue-links with proper ref prefixes."""
+    config_dir = tempfile.mkdtemp()
+    _setup_with_default_project(config_dir)
+
+    mock_query_response = {
+        "records": [{"attributes": {"id": "emodel/project@uuid"}}],
+    }
+    mock_load_response = {
+        "records": [{"attributes": {"?json": {"key": "COREDEV"}}}],
+    }
+
+    with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
+         patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("create_issue", {
+            "project": "COREDEV",
+            "type": "task",
+            "summary": "Child task",
+            "epic": "COREDEV-100",
+            "links_relates": ["COREDEV-50", "emodel/ept-issue@COREDEV-51"],
+            "links_blocker": ["COREDEV-60"],
+            "links_duplicate": ["COREDEV-70"],
+            "links_clone": ["COREDEV-80"],
+            "links_problem": ["COREDEV-90"],
+            "preview": True,
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    attrs = data["record"]["attributes"]
+    assert attrs["epicLink?str"] == "emodel/ept-issue@COREDEV-100"
+    assert attrs["issue-links:relates?assoc"] == [
+        "emodel/ept-issue@COREDEV-50",
+        "emodel/ept-issue@COREDEV-51",
+    ]
+    assert attrs["issue-links:blocker?assoc"] == ["emodel/ept-issue@COREDEV-60"]
+    assert attrs["issue-links:duplicate?assoc"] == ["emodel/ept-issue@COREDEV-70"]
+    assert attrs["issue-links:clone?assoc"] == ["emodel/ept-issue@COREDEV-80"]
+    assert attrs["issue-links:problem?assoc"] == ["emodel/ept-issue@COREDEV-90"]
+
+
 async def test_create_issue_default_priority(client: Client):
     """create_issue uses 300_medium as default priority."""
     config_dir = tempfile.mkdtemp()

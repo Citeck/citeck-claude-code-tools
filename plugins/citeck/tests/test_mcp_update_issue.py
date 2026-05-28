@@ -289,3 +289,52 @@ async def test_update_issue_release_full_ref_preserved(client: Client):
     assert data["record"]["attributes"]["fixInVersion?assoc"] == [
         "emodel/ecos-release-type@rel-200",
     ]
+
+
+async def test_update_issue_epic_and_links(client: Client):
+    """update_issue maps epic and links_* params to epicLink/issue-links assoc with proper prefixes."""
+    config_dir = tempfile.mkdtemp()
+    _setup_credentials(config_dir)
+
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("update_issue", {
+            "issue": "COREDEV-42",
+            "epic": "COREDEV-1",
+            "links_relates": ["COREDEV-2", "emodel/ept-issue@COREDEV-3"],
+            "links_blocker": ["COREDEV-4"],
+            "links_duplicate": ["COREDEV-5"],
+            "links_clone": ["COREDEV-6"],
+            "links_problem": ["COREDEV-7"],
+            "preview": True,
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    attrs = data["record"]["attributes"]
+    assert attrs["epicLink?str"] == "emodel/ept-issue@COREDEV-1"
+    assert attrs["issue-links:relates?assoc"] == [
+        "emodel/ept-issue@COREDEV-2",
+        "emodel/ept-issue@COREDEV-3",
+    ]
+    assert attrs["issue-links:blocker?assoc"] == ["emodel/ept-issue@COREDEV-4"]
+    assert attrs["issue-links:duplicate?assoc"] == ["emodel/ept-issue@COREDEV-5"]
+    assert attrs["issue-links:clone?assoc"] == ["emodel/ept-issue@COREDEV-6"]
+    assert attrs["issue-links:problem?assoc"] == ["emodel/ept-issue@COREDEV-7"]
+    assert attrs["_workspace?str"] == "COREDEV"
+
+
+async def test_update_issue_epic_clear(client: Client):
+    """update_issue with epic='' writes an empty string to clear the epic link."""
+    config_dir = tempfile.mkdtemp()
+    _setup_credentials(config_dir)
+
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("update_issue", {
+            "issue": "COREDEV-42",
+            "epic": "",
+            "preview": True,
+        })
+
+    data = result.data
+    assert data["ok"] is True
+    assert data["record"]["attributes"]["epicLink?str"] == ""
