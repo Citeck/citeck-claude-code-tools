@@ -51,7 +51,7 @@ async def test_create_issue_tool_exists(client: Client):
 
 
 async def test_create_issue_preview_mode(client: Client):
-    """create_issue with preview=true returns preview without creating."""
+    """preview_issue returns a preview record without creating."""
     config_dir = tempfile.mkdtemp()
     _setup_with_default_project(config_dir)
 
@@ -70,12 +70,11 @@ async def test_create_issue_preview_mode(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "Test task",
             "description": "A test description",
-            "preview": True,
         })
 
     data = result.data
@@ -95,7 +94,7 @@ async def test_create_issue_preview_mode(client: Client):
 
 
 async def test_create_issue_actual_create(client: Client):
-    """create_issue with preview=false creates the issue."""
+    """create_issue creates the issue."""
     config_dir = tempfile.mkdtemp()
     _setup_with_default_project(config_dir)
 
@@ -124,7 +123,6 @@ async def test_create_issue_actual_create(client: Client):
             "project": "COREDEV",
             "type": "bug",
             "summary": "Fix login bug",
-            "preview": False,
         })
 
     data = result.data
@@ -160,11 +158,10 @@ async def test_create_issue_project_resolution(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response) as mock_query, \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response) as mock_load, \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "MYPROJ",
             "type": "story",
             "summary": "New feature",
-            "preview": True,
         })
 
     data = result.data
@@ -178,8 +175,8 @@ async def test_create_issue_project_resolution(client: Client):
     assert query_call[1]["source_id"] == "emodel/project"
     assert query_call[1]["query"]["val"] == "MYPROJ"
 
-    # Verify load call for workspace key
-    load_call = mock_load.call_args
+    # Verify load call for workspace key (first load; preview also loads ref labels after)
+    load_call = mock_load.call_args_list[0]
     assert load_call[1]["record_ids"] == ["emodel/project@my-proj-uuid"]
 
 
@@ -202,10 +199,9 @@ async def test_create_issue_uses_default_project(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response) as mock_query, \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "type": "task",
             "summary": "Default project task",
-            "preview": True,
         })
 
     data = result.data
@@ -221,10 +217,9 @@ async def test_create_issue_no_project(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "type": "task",
             "summary": "No project task",
-            "preview": True,
         })
 
     data = result.data
@@ -241,11 +236,10 @@ async def test_create_issue_project_not_found(client: Client):
 
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "NONEXIST",
             "type": "task",
             "summary": "Test",
-            "preview": True,
         })
 
     data = result.data
@@ -259,11 +253,10 @@ async def test_create_issue_invalid_type(client: Client):
     _setup_with_default_project(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "invalid_type",
             "summary": "Test",
-            "preview": True,
         })
 
     data = result.data
@@ -286,12 +279,11 @@ async def test_create_issue_with_assignee(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "Assigned task",
             "assignee": "developer1",
-            "preview": True,
         })
 
     data = result.data
@@ -316,12 +308,11 @@ async def test_create_issue_assignee_me(client: Client):
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp.get_username", return_value="current_user"), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "My task",
             "assignee": "me",
-            "preview": True,
         })
 
     data = result.data
@@ -347,11 +338,10 @@ async def test_create_issue_reporter_auto_set(client: Client):
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp.get_username", return_value="reporter_user"), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "Task with reporter",
-            "preview": True,
         })
 
     data = result.data
@@ -376,11 +366,10 @@ async def test_create_issue_reporter_not_set_on_failure(client: Client):
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp.get_username", side_effect=Exception("no auth")), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "Task without reporter",
-            "preview": True,
         })
 
     data = result.data
@@ -395,12 +384,11 @@ async def test_create_issue_assignee_me_failure(client: Client):
 
     with patch("servers.citeck_mcp.get_username", side_effect=Exception("no auth")), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "My task",
             "assignee": "me",
-            "preview": True,
         })
 
     data = result.data
@@ -423,12 +411,11 @@ async def test_create_issue_with_sprint(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "Sprint task",
             "sprint": "sprint-uuid",
-            "preview": True,
         })
 
     data = result.data
@@ -452,13 +439,12 @@ async def test_create_issue_with_components_and_tags(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "Full task",
             "components": ["comp-uuid1", "emodel/ept-components@comp-uuid2"],
             "tags": ["tag-uuid1", "emodel/ept-tags@tag-uuid2"],
-            "preview": True,
         })
 
     data = result.data
@@ -489,13 +475,12 @@ async def test_create_issue_with_releases(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "bug",
             "summary": "Bug with releases",
             "fix_in_version": ["rel-uuid1", "emodel/ecos-release-type@rel-uuid2"],
             "affected_versions": ["rel-uuid0"],
-            "preview": True,
         })
 
     data = result.data
@@ -525,7 +510,7 @@ async def test_create_issue_with_epic_and_links(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "Child task",
@@ -535,7 +520,6 @@ async def test_create_issue_with_epic_and_links(client: Client):
             "links_duplicate": ["COREDEV-70"],
             "links_clone": ["COREDEV-80"],
             "links_problem": ["COREDEV-90"],
-            "preview": True,
         })
 
     data = result.data
@@ -567,11 +551,10 @@ async def test_create_issue_default_priority(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "Task with default priority",
-            "preview": True,
         })
 
     data = result.data
@@ -594,12 +577,11 @@ async def test_create_issue_custom_priority(client: Client):
     with patch("servers.citeck_mcp.lib_records_query", return_value=mock_query_response), \
          patch("servers.citeck_mcp.lib_records_load", return_value=mock_load_response), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
             "summary": "High priority task",
             "priority": "200_high",
-            "preview": True,
         })
 
     data = result.data
@@ -628,7 +610,6 @@ async def test_create_issue_api_error(client: Client):
             "project": "COREDEV",
             "type": "task",
             "summary": "Will fail",
-            "preview": False,
         })
 
     data = result.data
@@ -642,10 +623,9 @@ async def test_create_issue_missing_summary(client: Client):
     _setup_with_default_project(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("create_issue", {
+        result = await client.call_tool("preview_issue", {
             "project": "COREDEV",
             "type": "task",
-            "preview": True,
         })
 
     data = result.data

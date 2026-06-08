@@ -44,15 +44,14 @@ async def test_add_comment_tool_exists(client: Client):
 
 
 async def test_add_comment_preview_mode(client: Client):
-    """add_comment with preview=true returns preview without posting."""
+    """preview_comment returns a preview without posting."""
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("add_comment", {
+        result = await client.call_tool("preview_comment", {
             "issue": "COREDEV-42",
             "text": "<p>Test comment</p>",
-            "preview": True,
         })
 
     data = result.data
@@ -67,7 +66,7 @@ async def test_add_comment_preview_mode(client: Client):
 
 
 async def test_add_comment_actual_post(client: Client):
-    """add_comment with preview=false performs the mutation and returns id+link."""
+    """add_comment performs the mutation and returns id+link."""
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
 
@@ -83,7 +82,6 @@ async def test_add_comment_actual_post(client: Client):
         result = await client.call_tool("add_comment", {
             "issue": "COREDEV-42",
             "text": "Done",
-            "preview": False,
         })
 
     data = result.data
@@ -110,10 +108,9 @@ async def test_add_comment_empty_text(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("add_comment", {
+        result = await client.call_tool("preview_comment", {
             "issue": "COREDEV-42",
             "text": "   ",
-            "preview": True,
         })
 
     data = result.data
@@ -127,10 +124,9 @@ async def test_add_comment_full_ref_issue_preserved(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("add_comment", {
+        result = await client.call_tool("preview_comment", {
             "issue": "emodel/ept-issue@MYPROJ-7",
             "text": "Note",
-            "preview": True,
         })
 
     data = result.data
@@ -151,7 +147,6 @@ async def test_add_comment_api_error(client: Client):
         result = await client.call_tool("add_comment", {
             "issue": "COREDEV-42",
             "text": "Hi",
-            "preview": False,
         })
 
     data = result.data

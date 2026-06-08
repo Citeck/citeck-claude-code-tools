@@ -44,15 +44,14 @@ async def test_update_issue_tool_exists(client: Client):
 
 
 async def test_update_issue_preview_mode(client: Client):
-    """update_issue with preview=true returns preview without updating."""
+    """preview_issue returns a preview record without updating."""
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-42",
             "status": "in-progress",
-            "preview": True,
         })
 
     data = result.data
@@ -66,7 +65,7 @@ async def test_update_issue_preview_mode(client: Client):
 
 
 async def test_update_issue_actual_update(client: Client):
-    """update_issue with preview=false performs the mutation."""
+    """update_issue performs the mutation."""
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
 
@@ -82,7 +81,6 @@ async def test_update_issue_actual_update(client: Client):
         result = await client.call_tool("update_issue", {
             "issue": "COREDEV-42",
             "status": "done",
-            "preview": False,
         })
 
     data = result.data
@@ -105,10 +103,9 @@ async def test_update_issue_workspace_from_issue_id(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "MYPROJ-99",
             "summary": "Updated title",
-            "preview": True,
         })
 
     data = result.data
@@ -122,10 +119,9 @@ async def test_update_issue_full_ref(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "emodel/ept-issue@PROJ-5",
             "priority": "200_high",
-            "preview": True,
         })
 
     data = result.data
@@ -141,10 +137,9 @@ async def test_update_issue_assignee(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-10",
             "assignee": "developer1",
-            "preview": True,
         })
 
     data = result.data
@@ -159,10 +154,9 @@ async def test_update_issue_assignee_me(client: Client):
 
     with patch("servers.citeck_mcp.get_username", return_value="current_user"), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-10",
             "assignee": "me",
-            "preview": True,
         })
 
     data = result.data
@@ -177,10 +171,9 @@ async def test_update_issue_assignee_me_failure(client: Client):
 
     with patch("servers.citeck_mcp.get_username", side_effect=Exception("no auth")), \
          patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-10",
             "assignee": "me",
-            "preview": True,
         })
 
     data = result.data
@@ -194,9 +187,8 @@ async def test_update_issue_no_changes(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-10",
-            "preview": True,
         })
 
     data = result.data
@@ -210,13 +202,12 @@ async def test_update_issue_multiple_fields(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-42",
             "status": "in-progress",
             "priority": "100_critical",
             "summary": "Updated summary",
             "description": "Updated description",
-            "preview": True,
         })
 
     data = result.data
@@ -240,7 +231,6 @@ async def test_update_issue_api_error(client: Client):
         result = await client.call_tool("update_issue", {
             "issue": "COREDEV-42",
             "status": "done",
-            "preview": False,
         })
 
     data = result.data
@@ -254,11 +244,10 @@ async def test_update_issue_releases(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-42",
             "fix_in_version": ["rel-100"],
             "affected_versions": ["rel-90", "rel-91"],
-            "preview": True,
         })
 
     data = result.data
@@ -278,10 +267,9 @@ async def test_update_issue_release_full_ref_preserved(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-42",
             "fix_in_version": ["emodel/ecos-release-type@rel-200"],
-            "preview": True,
         })
 
     data = result.data
@@ -297,7 +285,7 @@ async def test_update_issue_epic_and_links(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-42",
             "epic": "COREDEV-1",
             "links_relates": ["COREDEV-2", "emodel/ept-issue@COREDEV-3"],
@@ -305,7 +293,6 @@ async def test_update_issue_epic_and_links(client: Client):
             "links_duplicate": ["COREDEV-5"],
             "links_clone": ["COREDEV-6"],
             "links_problem": ["COREDEV-7"],
-            "preview": True,
         })
 
     data = result.data
@@ -329,10 +316,9 @@ async def test_update_issue_epic_clear(client: Client):
     _setup_credentials(config_dir)
 
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
-        result = await client.call_tool("update_issue", {
+        result = await client.call_tool("preview_issue", {
             "issue": "COREDEV-42",
             "epic": "",
-            "preview": True,
         })
 
     data = result.data

@@ -1,7 +1,7 @@
 ---
 name: citeck-changes-to-task
 description: "Create a Citeck Project Tracker issue from current git changes"
-allowed-tools: Bash(git log *, git diff *, git branch --show-current, git branch -r, git merge-base *), Read, AskUserQuestion, mcp__citeck__list_projects, mcp__citeck__set_project_default, mcp__citeck__query_components, mcp__citeck__query_tags, mcp__citeck__create_issue
+allowed-tools: Bash(git log *, git diff *, git branch --show-current, git branch -r, git merge-base *), Read, AskUserQuestion, mcp__citeck__list_projects, mcp__citeck__set_project_default, mcp__citeck__query_components, mcp__citeck__query_tags, mcp__citeck__preview_issue, mcp__citeck__create_issue
 context: fork
 ---
 
@@ -24,10 +24,10 @@ Run `citeck:citeck-auth` first to configure your Citeck connection.
 
 The flow MUST always be:
 1. Build the issue parameters (type, summary, description)
-2. Call `mcp__citeck__create_issue` with `preview: true` to generate a preview
-3. Show the FULL preview to the user — NEVER summarize or paraphrase
+2. Call `mcp__citeck__preview_issue` to generate a human-readable preview (read-only — it never creates anything)
+3. Show the FULL preview `text` to the user — NEVER summarize or paraphrase
 4. Ask for explicit confirmation via AskUserQuestion
-5. Only after confirmation call `mcp__citeck__create_issue` with `preview: false`
+5. Only after confirmation call `mcp__citeck__create_issue` (which actually creates the issue)
 
 **Do NOT ask for generic confirmation — the user MUST see the preview before deciding.**
 
@@ -69,10 +69,10 @@ Automatically determine:
 
 ### Step 7: Preview
 
-Call `mcp__citeck__create_issue` with `preview: true`:
+Call `mcp__citeck__preview_issue` (read-only):
 
 ```
-mcp__citeck__create_issue(
+mcp__citeck__preview_issue(
   project: "<KEY>",
   type: "<task|story|bug>",
   summary: "<Title in English>",
@@ -80,21 +80,20 @@ mcp__citeck__create_issue(
   priority: "<priority>",
   assignee: "me",
   components: ["<ref>"],
-  tags: ["<ref>"],
-  preview: true
+  tags: ["<ref>"]
 )
 ```
 
-Show the FULL preview output to the user. **Always show which server (profile) the issue will be created on** — the user must see where the action will happen. Then ask via AskUserQuestion:
+Show the FULL preview `text` to the user (it already includes the target server/profile, resolved reference names, and the description rendered as readable text). Then ask via AskUserQuestion:
 
 > **Create this issue in Citeck? (server: <profile name / URL>)**
 > Options: "Yes, create", "Edit parameters", "Cancel"
 
-**If "Edit parameters"**: ask what to change, re-run with `preview: true` and updated params, show the FULL preview again.
+**If "Edit parameters"**: ask what to change, re-run `preview_issue` with updated params, show the FULL preview again.
 
 ### Step 8: Create the issue
 
-If confirmed, call the same tool with `preview: false`:
+If confirmed, call `mcp__citeck__create_issue` with the same parameters (no `preview` flag — this tool always creates):
 
 ```
 mcp__citeck__create_issue(
@@ -105,8 +104,7 @@ mcp__citeck__create_issue(
   priority: "<priority>",
   assignee: "me",
   components: ["<ref>"],
-  tags: ["<ref>"],
-  preview: false
+  tags: ["<ref>"]
 )
 ```
 

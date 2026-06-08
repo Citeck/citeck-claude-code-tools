@@ -675,6 +675,21 @@ _ISSUE_TYPE_SHORT_NAMES = {
     "epic": "ept-issue-epic",
 }
 
+# Human-readable display labels for previews (short type name -> label with emoji).
+_ISSUE_TYPE_DISPLAY = {
+    "ept-issue-task": "✅ Task",
+    "ept-issue-story": "📗 Story",
+    "ept-issue-bug": "🐞 Bug",
+    "ept-issue-epic": "🏔️ Epic",
+}
+
+_PRIORITY_DISPLAY = {
+    "100_critical": "🔴 Critical",
+    "200_high": "🟠 High",
+    "300_medium": "🟡 Medium",
+    "400_low": "🟢 Low",
+}
+
 _ISSUE_ATTRIBUTES = {
     "id": "?localId",
     "summary": "summary?str",
@@ -968,6 +983,84 @@ def _build_create_record(
     }
 
 
+def _prepare_create_record(
+    *,
+    type: str,
+    summary: str,
+    project: str | None,
+    description: str,
+    priority: str,
+    assignee: str | None,
+    sprint: str | None,
+    components: list[str] | None,
+    tags: list[str] | None,
+    fix_in_version: list[str] | None,
+    affected_versions: list[str] | None,
+    epic: str | None,
+    links_relates: list[str] | None,
+    links_blocker: list[str] | None,
+    links_duplicate: list[str] | None,
+    links_clone: list[str] | None,
+    links_problem: list[str] | None,
+    profile: str | None,
+    config_dir: str | None,
+) -> tuple[dict, str, str]:
+    """Resolve inputs and build a create-issue mutation record.
+
+    Returns (record, resolved_profile, server_url). Raises ValueError on
+    validation errors. Shared by create_issue (mutates) and preview_issue
+    (read-only) so the two never drift.
+    """
+    resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
+
+    if not summary:
+        raise ValueError("Summary is required.")
+    if type not in _ISSUE_TYPE_SHORT_NAMES:
+        valid = ", ".join(_ISSUE_TYPE_SHORT_NAMES.keys())
+        raise ValueError(f"Unknown issue type '{type}'. Valid types: {valid}.")
+
+    proj_key = project or get_default_project(profile=resolved, config_dir=config_dir)
+    if not proj_key:
+        raise ValueError(
+            "Project is required (no default project set). "
+            "Use set_project_default to set one."
+        )
+
+    ok, resolved_assignee = _resolve_assignee(assignee, resolved, config_dir)
+    if not ok:
+        raise ValueError(resolved_assignee)
+
+    try:
+        reporter = get_username(profile=resolved, config_dir=config_dir)
+    except Exception:
+        reporter = None
+
+    project_ref, workspace_key = _resolve_project_info(proj_key, profile=resolved, config_dir=config_dir)
+
+    record = _build_create_record(
+        issue_type=type,
+        summary=summary,
+        project_ref=project_ref,
+        workspace_key=workspace_key,
+        description=description,
+        priority=priority,
+        assignee=resolved_assignee,
+        reporter=reporter,
+        sprint=sprint,
+        components=components,
+        tags=tags,
+        fix_in_version=fix_in_version,
+        affected_versions=affected_versions,
+        epic=epic,
+        links_relates=links_relates,
+        links_blocker=links_blocker,
+        links_duplicate=links_duplicate,
+        links_clone=links_clone,
+        links_problem=links_problem,
+    )
+    return record, resolved, creds["url"].rstrip("/")
+
+
 @mcp.tool
 def create_issue(
     type: str,
@@ -987,15 +1080,15 @@ def create_issue(
     links_duplicate: list[str] | None = None,
     links_clone: list[str] | None = None,
     links_problem: list[str] | None = None,
-    preview: bool = True,
     profile: str | None = None,
 ) -> dict:
-    """Create an issue in Citeck Project Tracker.
+    """Create an issue in Citeck Project Tracker. This actually creates the issue.
 
     Routes through ept_profile if set, otherwise the active profile.
 
-    IMPORTANT: Always call with preview=true first. Show the FULL preview to the user.
-    Get explicit confirmation before calling with preview=false to actually create.
+    IMPORTANT: Call preview_issue first, show the FULL preview to the user, and get
+    explicit confirmation before calling this tool. preview_issue is read-only and
+    renders a human-readable preview without creating anything.
 
     Args:
         type: Issue type: task, story, bug, epic.
@@ -1015,7 +1108,6 @@ def create_issue(
         links_duplicate: Issue links of type "duplicates" — list of issue references.
         links_clone: Issue links of type "is cloned from" — list of issue references.
         links_problem: Issue links of type "is caused by" / problem — list of issue references.
-        preview: If true (default), returns preview without creating. Set false to actually create.
         profile: Override the profile for this call only. Usually leave empty.
 
     Reporter is auto-set to the current user.
@@ -1023,50 +1115,13 @@ def create_issue(
     config_dir = _get_config_dir()
 
     try:
-        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
-
-        # Validate required fields
-        if not summary:
-            return {"ok": False, "error": "Summary is required."}
-
-        # Validate type
-        if type not in _ISSUE_TYPE_SHORT_NAMES:
-            valid = ", ".join(_ISSUE_TYPE_SHORT_NAMES.keys())
-            return {"ok": False, "error": f"Unknown issue type '{type}'. Valid types: {valid}."}
-
-        # Resolve project
-        proj_key = project or get_default_project(profile=resolved, config_dir=config_dir)
-        if not proj_key:
-            return {
-                "ok": False,
-                "error": "Project is required (no default project set). "
-                         "Use set_project_default to set one.",
-            }
-
-        # Resolve assignee "me"
-        ok, resolved_assignee = _resolve_assignee(assignee, resolved, config_dir)
-        if not ok:
-            return {"ok": False, "error": resolved_assignee}
-
-        # Resolve reporter (current user)
-        try:
-            reporter = get_username(profile=resolved, config_dir=config_dir)
-        except Exception:
-            reporter = None
-
-        # Resolve project info
-        project_ref, workspace_key = _resolve_project_info(proj_key, profile=resolved, config_dir=config_dir)
-
-        # Build record
-        record = _build_create_record(
-            issue_type=type,
+        record, resolved, server_url = _prepare_create_record(
+            type=type,
             summary=summary,
-            project_ref=project_ref,
-            workspace_key=workspace_key,
+            project=project,
             description=description,
             priority=priority,
-            assignee=resolved_assignee,
-            reporter=reporter,
+            assignee=assignee,
             sprint=sprint,
             components=components,
             tags=tags,
@@ -1078,20 +1133,9 @@ def create_issue(
             links_duplicate=links_duplicate,
             links_clone=links_clone,
             links_problem=links_problem,
+            profile=profile,
+            config_dir=config_dir,
         )
-
-        # Resolve server info for responses
-        server_url = creds["url"].rstrip("/")
-
-        # Preview mode
-        if preview:
-            return {
-                "ok": True,
-                "preview": True,
-                "profile": resolved,
-                "server": server_url,
-                "record": record,
-            }
 
         # Actually create
         result = lib_records_mutate(
@@ -1210,6 +1254,56 @@ def _build_update_record(
     }
 
 
+def _prepare_update_record(
+    *,
+    issue: str,
+    status: str | None,
+    assignee: str | None,
+    priority: str | None,
+    summary: str | None,
+    description: str | None,
+    fix_in_version: list[str] | None,
+    affected_versions: list[str] | None,
+    epic: str | None,
+    links_relates: list[str] | None,
+    links_blocker: list[str] | None,
+    links_duplicate: list[str] | None,
+    links_clone: list[str] | None,
+    links_problem: list[str] | None,
+    profile: str | None,
+    config_dir: str | None,
+) -> tuple[dict, str, str]:
+    """Resolve inputs and build an update-issue mutation record.
+
+    Returns (record, resolved_profile, server_url). Raises ValueError on
+    validation errors. Shared by update_issue (mutates) and preview_issue
+    (read-only).
+    """
+    resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
+
+    ok, resolved_assignee = _resolve_assignee(assignee, resolved, config_dir)
+    if not ok:
+        raise ValueError(resolved_assignee)
+
+    record = _build_update_record(
+        issue_id=issue,
+        status=status,
+        assignee=resolved_assignee,
+        priority=priority,
+        summary=summary,
+        description=description,
+        fix_in_version=fix_in_version,
+        affected_versions=affected_versions,
+        epic=epic,
+        links_relates=links_relates,
+        links_blocker=links_blocker,
+        links_duplicate=links_duplicate,
+        links_clone=links_clone,
+        links_problem=links_problem,
+    )
+    return record, resolved, creds["url"].rstrip("/")
+
+
 @mcp.tool
 def update_issue(
     issue: str,
@@ -1226,15 +1320,15 @@ def update_issue(
     links_duplicate: list[str] | None = None,
     links_clone: list[str] | None = None,
     links_problem: list[str] | None = None,
-    preview: bool = True,
     profile: str | None = None,
 ) -> dict:
-    """Update an issue in Citeck Project Tracker.
+    """Update an issue in Citeck Project Tracker. This actually updates the issue.
 
     Routes through ept_profile if set, otherwise the active profile.
 
-    IMPORTANT: Always call with preview=true first. Show the FULL preview to the user.
-    Get explicit confirmation before calling with preview=false to actually update.
+    IMPORTANT: Call preview_issue (with the same `issue`) first, show the FULL preview
+    to the user, and get explicit confirmation before calling this tool. preview_issue
+    is read-only and renders a human-readable preview without changing anything.
 
     Args:
         issue: Issue ID (e.g. "COREDEV-42") or full record ref with PROJECT-NUMBER local ID
@@ -1252,24 +1346,15 @@ def update_issue(
         links_duplicate: Issue links of type "duplicates" — list of issue references. Replaces the current value.
         links_clone: Issue links of type "is cloned from" — list of issue references. Replaces the current value.
         links_problem: Issue links of type "is caused by" / problem — list of issue references. Replaces the current value.
-        preview: If true (default), returns preview without updating. Set false to actually update.
         profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
     try:
-        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
-
-        # Resolve assignee "me"
-        ok, resolved_assignee = _resolve_assignee(assignee, resolved, config_dir)
-        if not ok:
-            return {"ok": False, "error": resolved_assignee}
-
-        # Build record
-        record = _build_update_record(
-            issue_id=issue,
+        record, resolved, server_url = _prepare_update_record(
+            issue=issue,
             status=status,
-            assignee=resolved_assignee,
+            assignee=assignee,
             priority=priority,
             summary=summary,
             description=description,
@@ -1281,20 +1366,9 @@ def update_issue(
             links_duplicate=links_duplicate,
             links_clone=links_clone,
             links_problem=links_problem,
+            profile=profile,
+            config_dir=config_dir,
         )
-
-        # Resolve server info for responses
-        server_url = creds["url"].rstrip("/")
-
-        # Preview mode
-        if preview:
-            return {
-                "ok": True,
-                "preview": True,
-                "profile": resolved,
-                "server": server_url,
-                "record": record,
-            }
 
         # Actually update
         result = lib_records_mutate(
@@ -1617,6 +1691,247 @@ def _extract_image_urls(html: str | None, base_url: str | None = None) -> list[d
     return result
 
 
+# --- Preview rendering (HTML -> markdown, ref resolution, human-readable previews) ---
+
+
+class _MarkdownConverter(HTMLParser):
+    """Convert the limited Lexical HTML tag set into terminal-friendly markdown.
+
+    Handles: <p>, <h1..h6>, <ul>/<ol>/<li> (nested), <b>/<strong>, <i>/<em>,
+    <code>, <a href>, <br>, <img src>, <blockquote>. Unknown tags are ignored
+    but their text is kept.
+    """
+
+    _BLOCK_START = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "div"}
+
+    def __init__(self):
+        super().__init__()
+        self.blocks: list[str] = []
+        self._buf: list[str] = []
+        self._list_stack: list[list] = []  # each entry: [kind, counter]
+        self._href: str = ""
+
+    def _flush(self, prefix: str = "") -> None:
+        text = re.sub(r"[ \t]+", " ", "".join(self._buf)).strip()
+        self._buf = []
+        if text:
+            self.blocks.append(prefix + text)
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag in self._BLOCK_START:
+            self._flush()
+        if tag == "ul":
+            self._list_stack.append(["ul", 0])
+        elif tag == "ol":
+            self._list_stack.append(["ol", 0])
+        elif tag in ("b", "strong"):
+            self._buf.append("**")
+        elif tag in ("i", "em"):
+            self._buf.append("*")
+        elif tag == "code":
+            self._buf.append("`")
+        elif tag == "a":
+            self._href = a.get("href", "")
+            self._buf.append("[")
+        elif tag == "br":
+            self._flush()
+        elif tag == "img":
+            src = a.get("src", "")
+            if src:
+                self._buf.append(f"![image]({src})")
+
+    def handle_endtag(self, tag):
+        if tag in ("p", "div"):
+            self._flush()
+        elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            self._flush("#" * int(tag[1]) + " ")
+        elif tag == "blockquote":
+            self._flush("> ")
+        elif tag == "li":
+            if self._list_stack:
+                kind = self._list_stack[-1]
+                indent = "  " * (len(self._list_stack) - 1)
+                if kind[0] == "ol":
+                    kind[1] += 1
+                    self._flush(f"{indent}{kind[1]}. ")
+                else:
+                    self._flush(f"{indent}- ")
+            else:
+                self._flush("- ")
+        elif tag in ("ul", "ol"):
+            if self._list_stack:
+                self._list_stack.pop()
+        elif tag in ("b", "strong"):
+            self._buf.append("**")
+        elif tag in ("i", "em"):
+            self._buf.append("*")
+        elif tag == "code":
+            self._buf.append("`")
+        elif tag == "a":
+            self._buf.append(f"]({self._href})" if self._href else "]")
+            self._href = ""
+
+    def handle_data(self, data):
+        self._buf.append(data)
+
+    def get_markdown(self) -> str:
+        self._flush()
+        return "\n".join(self.blocks).strip()
+
+
+def _html_to_markdown(html: str | None) -> str:
+    """Render Lexical-format HTML as readable markdown for the terminal."""
+    if not html:
+        return ""
+    conv = _MarkdownConverter()
+    conv.feed(html)
+    return conv.get_markdown()
+
+
+def _indent(text: str, prefix: str = "  ") -> str:
+    """Indent every non-empty line of text with prefix."""
+    return "\n".join(prefix + line if line.strip() else line for line in text.split("\n"))
+
+
+# Attribute keys whose values are record refs (single-valued / list-valued).
+_PREVIEW_REF_KEYS_SINGLE = (
+    "link-project:project?str", "implementer?str", "reporter?str", "epicLink?str",
+)
+_PREVIEW_REF_KEYS_LIST = (
+    "sprint?assoc", "components?assoc", "tags?assoc",
+    "fixInVersion?assoc", "affectedVersions?assoc",
+    "issue-links:relates?assoc", "issue-links:blocker?assoc",
+    "issue-links:duplicate?assoc", "issue-links:clone?assoc",
+    "issue-links:problem?assoc",
+)
+
+
+def _collect_refs(attrs: dict) -> list[str]:
+    """Gather every record ref present in a mutation record's attributes."""
+    refs: list[str] = []
+    for key in _PREVIEW_REF_KEYS_SINGLE:
+        val = attrs.get(key)
+        if val:
+            refs.append(val)
+    for key in _PREVIEW_REF_KEYS_LIST:
+        val = attrs.get(key)
+        if isinstance(val, list):
+            refs.extend(r for r in val if r)
+        elif val:
+            refs.append(val)
+    return refs
+
+
+def _resolve_ref_labels(refs, profile, config_dir) -> dict:
+    """Batch-resolve record refs to their display names in one query.
+
+    Returns a {ref: display_name} map. Refs that fail to resolve are omitted,
+    so callers can flag them as missing.
+    """
+    unique = [r for r in dict.fromkeys(refs) if r]
+    if not unique:
+        return {}
+    try:
+        result = lib_records_load(
+            record_ids=unique,
+            attributes={"disp": "?disp"},
+            profile=profile,
+            config_dir=config_dir,
+        )
+    except Exception:
+        return {}
+    labels = {}
+    for rec in result.get("records", []):
+        rid = rec.get("id")
+        disp = (rec.get("attributes") or {}).get("disp")
+        if rid and disp:
+            labels[rid] = disp
+    return labels
+
+
+def _ref_link(ref: str, labels: dict, server_url: str) -> str:
+    """Render a record ref as a markdown link to its dashboard, or flag if unresolved."""
+    label = labels.get(ref)
+    if not label:
+        return f"⚠️ {ref} (не найдено)"
+    quoted = urllib.parse.quote(ref, safe="@/:")
+    return f"[{label}]({server_url}/v2/dashboard?recordRef={quoted})"
+
+
+# Ordered preview layout: (attribute key, human label, render kind).
+_PREVIEW_FIELD_ORDER = (
+    ("_type?str", "Тип", "type"),
+    ("link-project:project?str", "Проект", "reflink"),
+    ("_workspace?str", "Воркспейс", "plain"),
+    ("_state?str", "Статус", "plain"),
+    ("_status?str", "Статус", "plain"),
+    ("summary?str", "Заголовок", "plain"),
+    ("priority?str", "Приоритет", "priority"),
+    ("implementer?str", "Исполнитель", "reflink"),
+    ("reporter?str", "Автор", "reflink"),
+    ("sprint?assoc", "Спринт", "reflinks"),
+    ("components?assoc", "Компоненты", "reflinks"),
+    ("tags?assoc", "Теги", "reflinks"),
+    ("fixInVersion?assoc", "Целевые релизы", "reflinks"),
+    ("affectedVersions?assoc", "Затронутые релизы", "reflinks"),
+    ("epicLink?str", "Эпик", "reflink"),
+    ("issue-links:relates?assoc", "Связи · relates to", "reflinks"),
+    ("issue-links:blocker?assoc", "Связи · blocked by", "reflinks"),
+    ("issue-links:duplicate?assoc", "Связи · duplicates", "reflinks"),
+    ("issue-links:clone?assoc", "Связи · cloned from", "reflinks"),
+    ("issue-links:problem?assoc", "Связи · caused by", "reflinks"),
+)
+
+
+def _render_preview_value(val, kind: str, labels: dict, server_url: str):
+    """Render one attribute value for the preview. Returns None to skip the field."""
+    if kind == "type":
+        return _ISSUE_TYPE_DISPLAY.get(val, val)
+    if kind == "priority":
+        return _PRIORITY_DISPLAY.get(val, val)
+    if kind == "plain":
+        return val or None
+    if kind == "reflink":
+        if not val:
+            return "— (очистить)"
+        return _ref_link(val, labels, server_url)
+    if kind == "reflinks":
+        items = val if isinstance(val, list) else ([val] if val else [])
+        items = [r for r in items if r]
+        if not items:
+            return "— (очистить)"
+        return ", ".join(_ref_link(r, labels, server_url) for r in items)
+    return str(val)
+
+
+def _format_record_preview(record: dict, labels: dict, server_url: str, profile: str, mode: str) -> str:
+    """Build a human-readable markdown preview from a mutation record."""
+    attrs = record.get("attributes", {})
+    if mode == "create":
+        head = "Создание задачи"
+    else:
+        local = record.get("id", "").split("@")[-1]
+        head = f"Обновление {local}"
+
+    lines = [f"📋 Превью — {head}", f"_профиль: {profile} · {server_url}_", ""]
+    for key, label, kind in _PREVIEW_FIELD_ORDER:
+        if key not in attrs:
+            continue
+        rendered = _render_preview_value(attrs[key], kind, labels, server_url)
+        if rendered is None:
+            continue
+        lines.append(f"**{label}:** {rendered}")
+
+    if "description?str" in attrs:
+        md = _html_to_markdown(attrs["description?str"])
+        lines.append("")
+        lines.append("**Описание:**")
+        lines.append(_indent(md) if md else "  _(пусто)_")
+
+    return "\n".join(lines)
+
+
 # --- Comments ---
 
 _COMMENT_SOURCE_ID = "emodel/comment"
@@ -1787,47 +2102,46 @@ def _build_comment_record(issue_id: str, text: str) -> dict:
     }
 
 
+def _prepare_comment_record(
+    issue: str, text: str, profile: str | None, config_dir: str | None
+) -> tuple[dict, str, str]:
+    """Validate inputs and build a comment mutation record.
+
+    Returns (record, resolved_profile, server_url). Raises ValueError on
+    validation errors. Shared by add_comment (mutates) and preview_comment
+    (read-only).
+    """
+    if not text or not text.strip():
+        raise ValueError("Comment text is required.")
+    resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
+    record = _build_comment_record(issue_id=issue, text=text)
+    return record, resolved, creds["url"].rstrip("/")
+
+
 @mcp.tool
 def add_comment(
     issue: str,
     text: str,
-    preview: bool = True,
     profile: str | None = None,
 ) -> dict:
-    """Add a comment to an issue in Citeck Project Tracker.
+    """Add a comment to an issue in Citeck Project Tracker. This actually posts the comment.
 
     Routes through ept_profile if set, otherwise the active profile.
 
-    IMPORTANT: Always call with preview=true first. Show the FULL preview to the user.
-    Get explicit confirmation before calling with preview=false to actually post.
+    IMPORTANT: Call preview_comment first, show the FULL preview to the user, and get
+    explicit confirmation before calling this tool. preview_comment is read-only and
+    renders the comment as human-readable text without posting anything.
 
     Args:
         issue: Issue ID (e.g. "COREDEV-42") or full record ref with PROJECT-NUMBER local ID
                (e.g. "emodel/ept-issue@COREDEV-42"). UUID-based refs are not supported.
         text: Comment body in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
-        preview: If true (default), returns preview without posting. Set false to actually post.
         profile: Override the profile for this call only. Usually leave empty.
     """
     config_dir = _get_config_dir()
 
     try:
-        if not text or not text.strip():
-            return {"ok": False, "error": "Comment text is required."}
-
-        resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
-
-        record = _build_comment_record(issue_id=issue, text=text)
-
-        server_url = creds["url"].rstrip("/")
-
-        if preview:
-            return {
-                "ok": True,
-                "preview": True,
-                "profile": resolved,
-                "server": server_url,
-                "record": record,
-            }
+        record, resolved, server_url = _prepare_comment_record(issue, text, profile, config_dir)
 
         result = lib_records_mutate(
             records=[record],
@@ -1848,6 +2162,171 @@ def add_comment(
         if result_records:
             response["id"] = result_records[0].get("id", "unknown")
         return response
+
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except RecordsApiError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+def preview_issue(
+    type: str | None = None,
+    issue: str | None = None,
+    summary: str | None = None,
+    project: str | None = None,
+    description: str | None = None,
+    priority: str | None = None,
+    assignee: str | None = None,
+    status: str | None = None,
+    sprint: str | None = None,
+    components: list[str] | None = None,
+    tags: list[str] | None = None,
+    fix_in_version: list[str] | None = None,
+    affected_versions: list[str] | None = None,
+    epic: str | None = None,
+    links_relates: list[str] | None = None,
+    links_blocker: list[str] | None = None,
+    links_duplicate: list[str] | None = None,
+    links_clone: list[str] | None = None,
+    links_problem: list[str] | None = None,
+    profile: str | None = None,
+) -> dict:
+    """Render a human-readable preview of an issue create/update. READ-ONLY — never mutates.
+
+    This is the tool to call BEFORE create_issue / update_issue. It is safe to run
+    without confirmation (it only reads), and it returns a 'text' field with a
+    terminal-friendly markdown summary: type/priority shown as labels, all references
+    (project, sprint, components, tags, releases, epic, assignee) resolved to clickable
+    object links, and the description rendered from Lexical HTML into readable markdown.
+    Show that 'text' to the user verbatim, then call the real tool after confirmation.
+
+    Mode is chosen automatically:
+    - If 'issue' is given → preview an UPDATE (same args as update_issue; only the
+      fields you pass are shown).
+    - Otherwise → preview a CREATE (requires 'type'; same args as create_issue).
+
+    Args mirror create_issue / update_issue. Returns {ok, preview, profile, server,
+    text, record}. 'text' is the human-readable preview; 'record' is the raw payload.
+    """
+    config_dir = _get_config_dir()
+
+    try:
+        if issue:
+            record, resolved, server_url = _prepare_update_record(
+                issue=issue,
+                status=status,
+                assignee=assignee,
+                priority=priority,
+                summary=summary,
+                description=description,
+                fix_in_version=fix_in_version,
+                affected_versions=affected_versions,
+                epic=epic,
+                links_relates=links_relates,
+                links_blocker=links_blocker,
+                links_duplicate=links_duplicate,
+                links_clone=links_clone,
+                links_problem=links_problem,
+                profile=profile,
+                config_dir=config_dir,
+            )
+            mode = "update"
+        else:
+            if type is None:
+                return {
+                    "ok": False,
+                    "error": "For a create preview, 'type' is required (task/story/bug/epic). "
+                             "For an update preview, pass 'issue'.",
+                }
+            record, resolved, server_url = _prepare_create_record(
+                type=type,
+                summary=summary or "",
+                project=project,
+                description=description or "",
+                priority=priority or "300_medium",
+                assignee=assignee,
+                sprint=sprint,
+                components=components,
+                tags=tags,
+                fix_in_version=fix_in_version,
+                affected_versions=affected_versions,
+                epic=epic,
+                links_relates=links_relates,
+                links_blocker=links_blocker,
+                links_duplicate=links_duplicate,
+                links_clone=links_clone,
+                links_problem=links_problem,
+                profile=profile,
+                config_dir=config_dir,
+            )
+            mode = "create"
+
+        labels = _resolve_ref_labels(_collect_refs(record["attributes"]), resolved, config_dir)
+        text = _format_record_preview(record, labels, server_url, resolved, mode)
+        return {
+            "ok": True,
+            "preview": True,
+            "profile": resolved,
+            "server": server_url,
+            "text": text,
+            "record": record,
+        }
+
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except RecordsApiError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+def preview_comment(
+    issue: str,
+    text: str,
+    profile: str | None = None,
+) -> dict:
+    """Render a human-readable preview of a comment. READ-ONLY — never posts.
+
+    Call this BEFORE add_comment. Safe to run without confirmation. Returns a 'text'
+    field with the comment rendered from Lexical HTML into readable markdown. Show it
+    to the user, then call add_comment after confirmation.
+
+    Args:
+        issue: Issue ID (e.g. "COREDEV-42") or full record ref with PROJECT-NUMBER local ID.
+        text: Comment body in Russian, HTML format (Lexical editor).
+        profile: Override the profile for this call only. Usually leave empty.
+
+    Returns {ok, preview, profile, server, issue, text, record}.
+    """
+    config_dir = _get_config_dir()
+
+    try:
+        record, resolved, server_url = _prepare_comment_record(issue, text, profile, config_dir)
+        issue_ref = _issue_ref(issue)
+        md = _html_to_markdown(text)
+        body = _indent(md) if md else "  _(пусто)_"
+        preview_text = (
+            f"📋 Превью — комментарий к {issue}\n"
+            f"_профиль: {resolved} · {server_url}_\n\n"
+            f"{body}"
+        )
+        return {
+            "ok": True,
+            "preview": True,
+            "profile": resolved,
+            "server": server_url,
+            "issue": issue_ref,
+            "text": preview_text,
+            "record": record,
+        }
 
     except ValueError as e:
         return {"ok": False, "error": str(e)}

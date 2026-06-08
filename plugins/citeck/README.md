@@ -17,8 +17,11 @@ All tools are available as `mcp__citeck__<tool_name>`:
 - `list_projects` — list projects, fetch from API
 - `set_project_default` — set the default project for operations
 - `search_issues` — search issues with filters
-- `create_issue` — create issue with preview support
-- `update_issue` — update issue with preview support
+- `preview_issue` — read-only, human-readable preview of an issue create/update (refs resolved to names, description rendered from Lexical HTML); call before `create_issue`/`update_issue`
+- `create_issue` — create an issue (always creates; preview via `preview_issue`)
+- `update_issue` — update an issue (always updates; preview via `preview_issue`)
+- `preview_comment` — read-only, human-readable preview of a comment; call before `add_comment`
+- `add_comment` — add a comment to an issue (always posts; preview via `preview_comment`)
 - `query_comments` — fetch comments for a record with auto-download of image attachments
 - `download_attachment` — download a file from Citeck via authenticated session
 - `query_sprints`, `query_components`, `query_tags`, `query_releases` — project metadata
