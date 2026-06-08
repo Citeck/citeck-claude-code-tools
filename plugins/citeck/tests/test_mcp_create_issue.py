@@ -84,7 +84,7 @@ async def test_create_issue_preview_mode(client: Client):
     assert "record" in data
     record = data["record"]
     attrs = record["attributes"]
-    assert attrs["type?str"] == "ept-issue-task"
+    assert attrs["_type?str"] == "ept-issue-task"
     assert attrs["summary?str"] == "Test task"
     assert attrs["description?str"] == "A test description"
     assert attrs["_workspace?str"] == "COREDEV"
@@ -138,7 +138,7 @@ async def test_create_issue_actual_create(client: Client):
     records = call_args[1]["records"]
     assert len(records) == 1
     assert records[0]["id"] == "emodel/ept-issue@"
-    assert records[0]["attributes"]["type?str"] == "ept-issue-bug"
+    assert records[0]["attributes"]["_type?str"] == "ept-issue-bug"
 
 
 async def test_create_issue_project_resolution(client: Client):

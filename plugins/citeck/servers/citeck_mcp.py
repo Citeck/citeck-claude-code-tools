@@ -902,7 +902,7 @@ def _build_create_record(
 ) -> dict:
     """Build a mutation record for issue creation."""
     attributes = {
-        "type?str": _ISSUE_TYPE_SHORT_NAMES[issue_type],
+        "_type?str": _ISSUE_TYPE_SHORT_NAMES[issue_type],
         "_workspace?str": workspace_key,
         "_state?str": "submitted",
         "link-project:project?str": project_ref,
