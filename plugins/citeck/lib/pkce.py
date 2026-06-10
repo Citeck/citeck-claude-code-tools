@@ -19,6 +19,14 @@ import webbrowser
 from .auth import AuthError
 
 CALLBACK_PATH = "/callback"
+# offline_access yields a refresh token that survives the SSO session
+# (Keycloak offline-session policy, 30 days idle by default)
+DEFAULT_SCOPE = "openid offline_access"
+FALLBACK_SCOPE = "openid"
+
+
+class InvalidScopeError(AuthError):
+    """Keycloak rejected the requested scope (error=invalid_scope)."""
 
 
 def generate_pkce_pair():
@@ -75,11 +83,14 @@ def _exchange_code(token_endpoint, code, redirect_uri, client_id, code_verifier)
         result = json.loads(resp.read().decode("utf-8"))
 
     now = time.time()
+    # Keycloak reports refresh_expires_in=0 for offline tokens ("never expires")
+    refresh_expires_in = result.get("refresh_expires_in", 1800)
     return {
         "access_token": result["access_token"],
         "refresh_token": result.get("refresh_token"),
         "access_expires_at": now + result.get("expires_in", 300),
-        "refresh_expires_at": now + result.get("refresh_expires_in", 1800),
+        "refresh_expires_at": (None if refresh_expires_in == 0
+                               else now + refresh_expires_in),
     }
 
 
@@ -111,7 +122,7 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
         error = params.get("error", [None])[0]
         if error:
             error_desc = params.get("error_description", [error])[0]
-            self.server.callback_result = {"error": error_desc}
+            self.server.callback_result = {"error": error_desc, "error_code": error}
             self._send_html(400, ERROR_HTML.format(error=error_desc))
             return
 
@@ -170,22 +181,43 @@ class CallbackServer:
         self._server.server_close()
 
 
-def authorize(token_endpoint, auth_endpoint, client_id, timeout=120):
+def authorize(token_endpoint, auth_endpoint, client_id, timeout=120,
+              scope=DEFAULT_SCOPE):
     """Run the full PKCE authorization flow.
 
-    1. Start local callback server
-    2. Open browser to Keycloak login
-    3. Wait for callback with auth code
-    4. Exchange code for tokens
+    Requests offline_access by default for a long-lived refresh token.
+    If the client is not allowed that scope (invalid_scope callback),
+    retries once with plain "openid".
 
     Args:
         token_endpoint: OIDC token endpoint URL
         auth_endpoint: OIDC authorization endpoint URL
         client_id: OIDC client ID
         timeout: Seconds to wait for browser callback
+        scope: OAuth scope to request
 
     Returns dict with access_token, refresh_token, access_expires_at, refresh_expires_at.
     Raises AuthError on failure.
+    """
+    try:
+        return _authorize_once(token_endpoint, auth_endpoint, client_id,
+                               timeout, scope)
+    except InvalidScopeError:
+        if scope == FALLBACK_SCOPE:
+            raise
+        print(f"Scope '{scope}' rejected, retrying with '{FALLBACK_SCOPE}'...",
+              file=sys.stderr)
+        return _authorize_once(token_endpoint, auth_endpoint, client_id,
+                               timeout, FALLBACK_SCOPE)
+
+
+def _authorize_once(token_endpoint, auth_endpoint, client_id, timeout, scope):
+    """Single PKCE flow attempt.
+
+    1. Start local callback server
+    2. Open browser to Keycloak login
+    3. Wait for callback with auth code
+    4. Exchange code for tokens
     """
     code_verifier, code_challenge = generate_pkce_pair()
     state = generate_state()
@@ -195,6 +227,7 @@ def authorize(token_endpoint, auth_endpoint, client_id, timeout=120):
         redirect_uri = f"http://127.0.0.1:{server.port}{CALLBACK_PATH}"
         auth_url = _build_authorization_url(
             auth_endpoint, client_id, redirect_uri, state, code_challenge,
+            scope=scope,
         )
 
         print(f"\nOpen this URL in your browser to log in:\n\n  {auth_url}\n",
@@ -209,6 +242,8 @@ def authorize(token_endpoint, auth_endpoint, client_id, timeout=120):
         server.shutdown()
 
     if "error" in result:
+        if result.get("error_code") == "invalid_scope":
+            raise InvalidScopeError(f"Authorization failed: {result['error']}")
         raise AuthError(f"Authorization failed: {result['error']}")
 
     if result.get("state") != state:

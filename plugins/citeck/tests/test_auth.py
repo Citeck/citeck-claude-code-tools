@@ -521,7 +521,7 @@ class TestGetAuthHeaderOIDCPKCE(unittest.TestCase):
     def test_raises_reauth_when_no_tokens(self):
         with self.assertRaises(ReauthenticationRequired) as ctx:
             get_auth_header(config_dir=self.tmpdir)
-        self.assertIn("citeck:citeck-auth", str(ctx.exception))
+        self.assertIn("reauthenticate", str(ctx.exception))
 
     def test_raises_reauth_when_all_expired(self):
         now = time.time()
@@ -538,6 +538,36 @@ class TestGetAuthHeaderOIDCPKCE(unittest.TestCase):
         """PKCE profiles must not fall back to Basic Auth."""
         with self.assertRaises(ReauthenticationRequired):
             get_auth_header(config_dir=self.tmpdir)
+
+    @patch("lib.auth._token_request")
+    def test_offline_refresh_token_never_expires(self, mock_request):
+        """refresh_expires_at=None (offline token) is treated as valid."""
+        now = time.time()
+        _save_cache({
+            "access_token": "old",
+            "refresh_token": "offline-ref",
+            "access_expires_at": now - 10,
+            "refresh_expires_at": None,
+        }, "default", config_dir=self.tmpdir)
+        mock_request.return_value = _make_token_response(access_token="refreshed")
+        header = get_auth_header(config_dir=self.tmpdir)
+        self.assertEqual(header, "Bearer refreshed")
+
+    @patch("lib.auth._token_request")
+    def test_refresh_grant_preserves_offline_expiry(self, mock_request):
+        """refresh_expires_in=0 in the refresh response is stored as None."""
+        now = time.time()
+        _save_cache({
+            "access_token": "old",
+            "refresh_token": "offline-ref",
+            "access_expires_at": now - 10,
+            "refresh_expires_at": None,
+        }, "default", config_dir=self.tmpdir)
+        mock_request.return_value = _make_token_response(
+            access_token="refreshed", refresh_expires_in=0)
+        get_auth_header(config_dir=self.tmpdir)
+        cache = _load_cache("default", config_dir=self.tmpdir)
+        self.assertIsNone(cache["refresh_expires_at"])
 
 
 class TestValidateConnectionPKCE(unittest.TestCase):
@@ -571,11 +601,23 @@ class TestValidateConnectionPKCE(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["method"], "oidc-pkce")
 
+    def test_valid_offline_refresh_token(self):
+        now = time.time()
+        _save_cache({
+            "access_token": "old",
+            "refresh_token": "offline-ref",
+            "access_expires_at": now - 10,
+            "refresh_expires_at": None,
+        }, "default", config_dir=self.tmpdir)
+        result = validate_connection(config_dir=self.tmpdir)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["method"], "oidc-pkce")
+
     def test_no_valid_token(self):
         result = validate_connection(config_dir=self.tmpdir)
         self.assertFalse(result["ok"])
         self.assertEqual(result["method"], "oidc-pkce")
-        self.assertIn("citeck:citeck-auth", result["error"])
+        self.assertIn("reauthenticate", result["error"])
 
 
 def _make_jwt(payload):

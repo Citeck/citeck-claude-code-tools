@@ -154,7 +154,7 @@ Run `switch_profile.py --list` to check if profiles already exist.
 
 ## Re-authentication
 
-When a PKCE session expires (both access and refresh tokens), skills will report a `ReauthenticationRequired` error. In that case, re-run this skill to authenticate again via browser.
+When a PKCE session expires (both access and refresh tokens), prefer the MCP tool `mcp__citeck__reauthenticate` — it opens the browser and refreshes tokens for an existing profile without re-running this skill. This skill is for first-time setup, changing URLs/credentials, and managing profiles. Use it for re-authentication only when the MCP server is unavailable or the profile is password-based.
 
 ## Credentials Storage
 

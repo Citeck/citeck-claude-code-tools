@@ -18,7 +18,11 @@ from lib.pkce import (
     generate_state,
     _build_authorization_url,
     _exchange_code,
+    authorize,
     CallbackServer,
+    InvalidScopeError,
+    DEFAULT_SCOPE,
+    FALLBACK_SCOPE,
 )
 
 TOKEN_ENDPOINT = "https://eis.example.com/auth/realms/TestRealm/protocol/openid-connect/token"
@@ -106,6 +110,26 @@ class TestExchangeCode(unittest.TestCase):
         self.assertIn("code_verifier=myverifier", body)
         self.assertIn("client_id=nginx", body)
 
+    @patch("lib.pkce.urllib.request.urlopen")
+    def test_offline_token_never_expires(self, mock_urlopen):
+        """Keycloak reports refresh_expires_in=0 for offline tokens."""
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({
+            "access_token": "at",
+            "refresh_token": "offline-rt",
+            "expires_in": 300,
+            "refresh_expires_in": 0,
+        }).encode()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        result = _exchange_code(
+            TOKEN_ENDPOINT, "mycode",
+            "http://127.0.0.1:8080/callback", "nginx", "myverifier",
+        )
+        self.assertIsNone(result["refresh_expires_at"])
+
 
 class TestCallbackServer(unittest.TestCase):
     def test_port_assigned(self):
@@ -156,6 +180,7 @@ class TestCallbackServer(unittest.TestCase):
             t.join()
             self.assertIn("error", result)
             self.assertIn("denied", result["error"])
+            self.assertEqual(result["error_code"], "access_denied")
         finally:
             server.shutdown()
 
@@ -213,6 +238,47 @@ class TestAuthorize(unittest.TestCase):
         self.assertEqual(result["access_token"], "at")
         mock_browser.assert_called_once()
         mock_exchange.assert_called_once()
+
+        # Default scope requests an offline refresh token
+        browser_url = mock_browser.call_args[0][0]
+        self.assertIn("offline_access", browser_url)
+
+
+class TestAuthorizeScopeFallback(unittest.TestCase):
+    def test_default_scope_includes_offline_access(self):
+        self.assertEqual(DEFAULT_SCOPE, "openid offline_access")
+
+    @patch("lib.pkce._authorize_once")
+    def test_invalid_scope_retries_with_openid(self, mock_once):
+        tokens = {"access_token": "at", "refresh_token": "rt",
+                  "access_expires_at": 1.0, "refresh_expires_at": None}
+        mock_once.side_effect = [InvalidScopeError("invalid_scope"), tokens]
+
+        result = authorize(TOKEN_ENDPOINT, AUTH_ENDPOINT, "nginx", timeout=5)
+
+        self.assertEqual(result, tokens)
+        self.assertEqual(mock_once.call_count, 2)
+        first_scope = mock_once.call_args_list[0][0][4]
+        second_scope = mock_once.call_args_list[1][0][4]
+        self.assertEqual(first_scope, DEFAULT_SCOPE)
+        self.assertEqual(second_scope, FALLBACK_SCOPE)
+
+    @patch("lib.pkce._authorize_once")
+    def test_invalid_scope_on_fallback_raises(self, mock_once):
+        mock_once.side_effect = InvalidScopeError("invalid_scope")
+
+        with self.assertRaises(InvalidScopeError):
+            authorize(TOKEN_ENDPOINT, AUTH_ENDPOINT, "nginx", timeout=5,
+                      scope=FALLBACK_SCOPE)
+        self.assertEqual(mock_once.call_count, 1)
+
+    @patch("lib.pkce._authorize_once")
+    def test_other_auth_errors_not_retried(self, mock_once):
+        mock_once.side_effect = AuthError("Authorization failed: User denied")
+
+        with self.assertRaises(AuthError):
+            authorize(TOKEN_ENDPOINT, AUTH_ENDPOINT, "nginx", timeout=5)
+        self.assertEqual(mock_once.call_count, 1)
 
 
 if __name__ == "__main__":

@@ -91,6 +91,9 @@ mcp = FastMCP(
         "Multiple environments are supported via profiles. Use list_profiles to see "
         "configured environments and set_active_profile to switch between them — "
         "do NOT ask the user to invoke /citeck:citeck-auth just to switch.\n\n"
+        "If a tool fails with a session-expired error, call the reauthenticate tool "
+        "(it opens the user's browser for login and blocks until complete), then "
+        "retry the original operation — do NOT send the user to /citeck:citeck-auth.\n\n"
         "Specialized profiles can route specific tool groups to different environments:\n"
         "- ept_profile (set_ept_profile): task-tracker tools (search_issues, create_issue, "
         "update_issue, list_projects, query_sprints/components/tags/releases, query_comments, "
@@ -141,6 +144,81 @@ def test_connection() -> dict:
             result["profile"] = profile
 
         return result
+    except AuthError as e:
+        return {"ok": False, "error": str(e)}
+    except ConfigError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool
+def reauthenticate(profile: str | None = None, timeout: int = 120) -> dict:
+    """Re-authenticate an expired OIDC PKCE session via browser login.
+
+    Call this when another tool fails with a session-expired error.
+    It opens the user's browser to the Keycloak login page and blocks
+    until login completes (or timeout). Tell the user a browser window
+    is opening, and retry the original operation after success.
+
+    Only works for profiles configured with browser-based auth
+    (oidc-pkce). For basic/password profiles use the citeck-auth skill.
+
+    Args:
+        profile: Profile to re-authenticate (default: active profile).
+        timeout: Seconds to wait for the browser login (default: 120).
+    """
+    from lib import auth as lib_auth
+    from lib import pkce as lib_pkce
+
+    config_dir = _get_config_dir()
+    try:
+        resolved = profile or get_active_profile(config_dir)
+        creds = get_credentials(resolved, config_dir)
+        if creds is None:
+            return {
+                "ok": False,
+                "error": f"No credentials found for profile '{resolved}'. "
+                         "Run 'citeck:citeck-auth' to configure.",
+            }
+
+        if creds.get("auth_method") != "oidc-pkce":
+            return {
+                "ok": False,
+                "error": f"Profile '{resolved}' uses "
+                         f"'{creds.get('auth_method', 'oidc')}' auth, which does not "
+                         "need browser re-authentication. If credentials are broken, "
+                         "reconfigure via the citeck-auth skill.",
+            }
+
+        token_endpoint = creds.get("token_endpoint")
+        auth_endpoint = creds.get("authorization_endpoint")
+        if not token_endpoint or not auth_endpoint:
+            eis_info = lib_auth.discover_eis(creds["url"])
+            endpoints = lib_auth.discover_oidc_endpoints(
+                eis_info["eis_id"], eis_info["realm"])
+            if not endpoints:
+                return {
+                    "ok": False,
+                    "error": "Could not discover OIDC endpoints from Keycloak. "
+                             "Check that the server is reachable.",
+                }
+            token_endpoint = endpoints["token_endpoint"]
+            auth_endpoint = endpoints["authorization_endpoint"]
+
+        tokens = lib_pkce.authorize(
+            token_endpoint, auth_endpoint,
+            creds.get("client_id") or "citeck-ai-agent",
+            timeout=timeout,
+        )
+        lib_auth._save_cache(tokens, resolved, config_dir)
+
+        return {
+            "ok": True,
+            "profile": resolved,
+            "url": creds["url"],
+            "username": get_username(profile=resolved, config_dir=config_dir),
+        }
     except AuthError as e:
         return {"ok": False, "error": str(e)}
     except ConfigError as e:

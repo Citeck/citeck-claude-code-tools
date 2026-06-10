@@ -238,11 +238,14 @@ def _refresh_grant(creds, refresh_token):
         params["client_secret"] = creds["client_secret"]
     result = _token_request(endpoint, params)
     now = time.time()
+    # Keycloak reports refresh_expires_in=0 for offline tokens ("never expires")
+    refresh_expires_in = result.get("refresh_expires_in", 1800)
     return {
         "access_token": result["access_token"],
         "refresh_token": result.get("refresh_token", refresh_token),
         "access_expires_at": now + result.get("expires_in", 300),
-        "refresh_expires_at": now + result.get("refresh_expires_in", 1800),
+        "refresh_expires_at": (None if refresh_expires_in == 0
+                               else now + refresh_expires_in),
     }
 
 
@@ -253,6 +256,19 @@ def _basic_auth_header(username, password):
 
 class AuthError(Exception):
     """Raised when authentication fails and no fallback is available."""
+
+
+def _refresh_token_valid(cache, now):
+    """Check that the cached refresh token exists and has not expired.
+
+    refresh_expires_at is None for offline tokens (never expires).
+    """
+    if not cache or not cache.get("refresh_token"):
+        return False
+    expires_at = cache.get("refresh_expires_at", 0)
+    if expires_at is None:
+        return True
+    return expires_at > now + TOKEN_EXPIRY_MARGIN
 
 
 class ReauthenticationRequired(AuthError):
@@ -280,8 +296,7 @@ def get_auth_header(profile=None, config_dir=None):
     if cache and cache.get("access_expires_at", 0) > now + TOKEN_EXPIRY_MARGIN:
         return f"Bearer {cache['access_token']}"
 
-    if (cache and cache.get("refresh_token")
-            and cache.get("refresh_expires_at", 0) > now + TOKEN_EXPIRY_MARGIN):
+    if _refresh_token_valid(cache, now):
         try:
             cache = _refresh_grant(creds, cache["refresh_token"])
             _save_cache(cache, resolved_profile, config_dir)
@@ -292,7 +307,8 @@ def get_auth_header(profile=None, config_dir=None):
     if auth_method == "oidc-pkce":
         raise ReauthenticationRequired(
             f"Session expired for profile '{resolved_profile}'. "
-            "Run 'citeck:citeck-auth' to re-authenticate via browser."
+            "Call the 'reauthenticate' tool to re-login via browser, "
+            "then retry the original operation."
         )
 
     try:
@@ -362,12 +378,12 @@ def _validate_pkce(profile, config_dir=None):
     cache = _load_cache(profile, config_dir)
     if cache and cache.get("access_expires_at", 0) > now + TOKEN_EXPIRY_MARGIN:
         return {"ok": True, "method": "oidc-pkce", "error": None}
-    if (cache and cache.get("refresh_token")
-            and cache.get("refresh_expires_at", 0) > now + TOKEN_EXPIRY_MARGIN):
+    if _refresh_token_valid(cache, now):
         return {"ok": True, "method": "oidc-pkce", "error": None}
     return {
         "ok": False, "method": "oidc-pkce",
-        "error": "No valid token cached. Run 'citeck:citeck-auth' to authenticate.",
+        "error": "No valid token cached. Call the 'reauthenticate' tool "
+                 "to authenticate via browser.",
     }
 
 
