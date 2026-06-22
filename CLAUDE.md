@@ -68,6 +68,7 @@ Skills under `skills/`:
 - `citeck-auth` — PKCE browser flow, runs Python scripts via `Bash(python3 ...)`
 - `citeck-changes-to-task` — workflow skill using MCP tools
 - `citeck-changes-to-task-md` — generates task.md, uses git + Write (no MCP)
+- `citeck-test-feature` — guide + scaffolder for feature acceptance testing; `references/` (durable methodology), `examples/` (profile), `templates/` (generated plan), `scripts/` (fixture generators). Uses Citeck MCP + Playwright MCP (`mcp__plugin_playwright_playwright__*`) + scripted HTTP
 
 ## Testing patterns
 
