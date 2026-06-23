@@ -43,8 +43,27 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp_
 - `mcp__citeck__list_profiles` + `mcp__citeck__test_connection` → показать пользователю
   **фактический `base_url` + профиль**, зафиксировать `base_url` как переменную для всех
   curl/Playwright/Records-операций.
+- ⚠ **Profile-mismatch guard.** Сравнить URL **выбранного** стенда с `test_connection.url` И с
+  `active_profile`/`records_profile` из `list_profiles`. Если они расходятся (типовой случай: active/
+  ept = `production`, а тестируем `local`) — **не продолжать на чужом профиле**: переключить
+  `set_active_profile <выбранный>` (и при нужде `set_records_profile`), затем повторить
+  `test_connection` и убедиться `url == <base_url выбранного стенда>`. **Жёсткое правило: ни одной
+  мутации, пока active/records-профиль указывает на стенд класса `prod`** (даже если данные пишутся
+  «в local» — легко промахнуться роутингом). `ept_profile` (трекер) может оставаться на проде —
+  это read-only по issue/комментариям.
+- ⚠ **Liveness-проба ДО скаффолдинга** (не откладывать на шаг 6). Дешёвый аборт мёртвого стенда
+  раньше, чем потрачено время на генерацию плана:
+  ```bash
+  docker info >/dev/null 2>&1 && echo "docker UP" || echo "docker DOWN"   # если стенд докеризован
+  curl -sS -m 8 $AUTH "$BASE/gateway/<service>/<health>" -w '|HTTP=%{http_code}'  # gateway жив?
+  ```
+  Если gateway/`:80` refused или Docker down — **СТОП**, попросить пользователя поднять стенд;
+  скаффолдить план можно (стенд для этого не нужен), но прогон не начинать.
 - Определить классификацию стенда по стенд-политике (`<project>/docs/plans/.test-stands.yml` или
   таблица в `environment.md` §«Декларация стендов»). **НЕ угадывать по hostname.**
+- ⚠ **Bootstrap декларации.** Если `<project>/docs/plans/.test-stands.yml` отсутствует — предложить
+  создать его из `${CLAUDE_SKILL_DIR}/templates/test-stands.yml` (checked-in декларация приоритетнее
+  fallback-таблицы и фиксирует safety-границы в репозитории проекта), затем продолжить.
 - **Решение:**
   - стенд non-prod с `destructive_allowed: true` + workspace ∈ `allowed_workspaces` → мутации разрешены;
   - `destructive_allowed: false` → только read-only (`records_query`, GET, навигация без мутаций);
@@ -60,6 +79,15 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp_
 (A=API-параллельно, B=UI-последовательно) и кластерам (минимизация рестартов). Присвоить ID
 (T/S/R/F/I/C — см. `references/tier-cluster-model.md`). До реализации зафиксировать два списка:
 unit-сценарии и приёмочный чек-лист.
+
+⚠ **Delta/follow-up issue.** Если фича — продолжение уже оттестированной (напр. issue ветвится от
+родительской feature-ветки), **не** диффать против `merge-base develop` — он захватит весь родитель
+и раздует скоуп (легко получить 20k+ строк чужого поведения). Вместо этого:
+- диффать **собственный commit-range** issue (`git log <parent-feature>..<issue-branch>` или диапазон
+  её фикс-коммитов) и брать только `src/main`-файлы, отсеяв шум merge-коммитов из develop;
+- **переиспользовать** результаты прошлых прогонов (config-toggle кластеры, provider-матрицы),
+  явно пометив их out-of-scope со ссылкой на прошлый отчёт, а не гонять заново;
+- центр delta-прогона — обычно один кластер (default) + узкая регрессия родителя по затронутым классам.
 
 ### 5. Скаффолдинг папки (идемпотентно)
 В `<project>/docs/plans/<YYYY-MM-DD>-<issue>-test-plan/` из `templates/`: README (`plan-readme.md`),

@@ -1,0 +1,25 @@
+# Test-stand policy (checked-in). Copy to <project>/docs/plans/.test-stands.yml and fill in.
+# Read by the citeck-test-feature skill — has PRIORITY over the fallback table in
+# references/environment.md §«Декларация стендов». Deny-by-default: a stand NOT listed here is
+# fail-closed (read-only / STOP).
+stands:
+  local:
+    classification: local            # local | qa | staging | prod
+    base_url: http://localhost
+    destructive_allowed: true        # service under tester's control (Launcher / Maven)
+    allowed_workspaces: ["test-*"]   # mutations confined to these workspaces
+    notes: >
+      <how the stand is run — Docker namespace, Maven port, auth method, external providers>
+
+  # qa-main:
+  #   classification: qa
+  #   base_url: https://qa.example.ru
+  #   destructive_allowed: true      # dedicated QA under tester control
+  #   allowed_workspaces: ["test-acceptance"]
+
+  production:
+    classification: prod
+    base_url: https://<prod-host>
+    destructive_allowed: false       # read-only ALWAYS — never run acceptance mutations here
+    allowed_workspaces: []
+    notes: Tracker (ept_profile) may live here; records_mutate / config patches FORBIDDEN.
