@@ -24,6 +24,7 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp_
 | `references/tools-cheatsheet.md` | Перед HTTP/RA-кейсами — теги, gateway harness, async-polling |
 | `references/records-api-patterns.md` | Перед setup/verify через Records API |
 | `references/playwright-tips.md` | Перед UI-кейсами (Tier B) |
+| `references/test-case-design.md` | Шаг 4 — уровни тестирования, типы кейсов, принципы составления |
 | `references/tier-cluster-model.md` | Шаг 4 — раскладка по tier'ам/кластерам, ID-конвенции, done-criteria |
 | `references/subagent-orchestration.md` | Шаг 7 — оркестрация субагентов, «что делать если» |
 | `examples/citeck-ai-assistant.md` | Если тестируется AI-ассистент — профиль-пример |
@@ -75,7 +76,11 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp_
 Прочитать нужные `references/*` под тип фичи. Если AI-ассистент — `examples/citeck-ai-assistant.md`.
 
 ### 4. Скоупинг кейсов
-По диффу ветки / design-доку / описанию issue выделить новое поведение. Разложить по tier'ам
+По диффу ветки / design-доку / описанию issue выделить новое поведение. Прочитать
+`references/test-case-design.md` — уровни тестирования (смоук/санити/приёмка/регресс/полное), типы
+кейсов (в т.ч. негатив/робастность, комплементарное покрытие «на отсутствие», темпоральное/TZ,
+матрицы-эталоны прав/атрибутов) и принципы составления (источник истины = спека+код; дизайн отделён
+от прогона; прогон = весь набор; расхождения спека↔код фиксировать открыто). Разложить по tier'ам
 (A=API-параллельно, B=UI-последовательно) и кластерам (минимизация рестартов). Присвоить ID
 (T/S/R/F/I/C — см. `references/tier-cluster-model.md`). До реализации зафиксировать два списка:
 unit-сценарии и приёмочный чек-лист.
