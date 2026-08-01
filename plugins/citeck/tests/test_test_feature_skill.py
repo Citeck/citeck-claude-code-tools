@@ -318,6 +318,24 @@ class TestValidatePlan(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing checked criterion 'Cleanup restored'", result.stderr)
+            # One error per criterion, not one from each of the two gate checks.
+            self.assertEqual(result.stderr.count("Cleanup restored"), 1, result.stderr)
+
+    def test_extra_unchecked_gate_item_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = write_valid_plan(Path(tmp))
+            report = write_valid_report(plan)
+            report.write_text(
+                report.read_text().replace(
+                    "- [x] Cleanup restored the baseline",
+                    "- [x] Cleanup restored the baseline\n- [ ] screenshots attached",
+                )
+            )
+            result = run_script(
+                "validate-plan.py", str(plan), "--scope", "full", "--report", "reports/run.md"
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Final Gate item is unchecked: - [ ] screenshots attached", result.stderr)
 
     def test_unchecked_boxes_outside_the_final_gate_are_allowed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -333,6 +351,24 @@ class TestValidatePlan(unittest.TestCase):
                 "validate-plan.py", str(plan), "--scope", "full", "--report", "reports/run.md"
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_case_id_is_recognised_at_the_end_of_a_sentence(self):
+        """Found road-testing the skill: `… and F1.` was read as a missing mention."""
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = write_valid_plan(Path(tmp))
+            for name in ("tier-a-feature.md", "tier-b-ui.md"):
+                (plan / "subagent-prompts" / name).write_text("Run the assigned case F1.\n")
+            result = run_script("validate-plan.py", str(plan))
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_sub_case_id_does_not_count_as_the_parent_mention(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = write_valid_plan(Path(tmp))
+            for name in ("tier-a-feature.md", "tier-b-ui.md"):
+                (plan / "subagent-prompts" / name).write_text("Run only F1.2 here.\n")
+            result = run_script("validate-plan.py", str(plan))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not mention exact case ID", result.stderr)
 
     def test_execution_scope_requires_report(self):
         with tempfile.TemporaryDirectory() as tmp:

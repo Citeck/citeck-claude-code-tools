@@ -249,8 +249,9 @@ def validate_manifest(
             if prompt == "-":
                 continue
             prompt_path = validation.relative_file(prompt)
+            # A trailing period ends a sentence; only `.<digit>` means a different sub-case ID.
             if prompt_path and not re.search(
-                rf"(?<![A-Z0-9.-]){re.escape(case_id)}(?![A-Z0-9.-])",
+                rf"(?<![A-Z0-9.-]){re.escape(case_id)}(?![A-Z0-9-])(?!\.\d)",
                 prompt_path.read_text(),
             ):
                 validation.error(f"{case_id}: runner prompt {prompt} does not mention exact case ID")
@@ -607,11 +608,12 @@ def validate_final_gate(validation: Validation, text: str, report_name: str, sco
             validation.error(
                 f"{report_name}: scope={scope} must not claim full-run criterion {marker!r}"
             )
+    # Known criteria are already reported above; this only catches extra unchecked items.
+    known = COMMON_GATE_MARKERS + FULL_GATE_MARKERS
     for line in gate.splitlines():
         if not line.startswith("- [ ]"):
             continue
-        excused = scope != "full" and any(marker in line for marker in FULL_GATE_MARKERS)
-        if not excused:
+        if not any(marker in line for marker in known):
             validation.error(f"{report_name}: Final Gate item is unchecked: {line.strip()}")
 
 
