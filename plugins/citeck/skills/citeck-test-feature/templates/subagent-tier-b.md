@@ -3,7 +3,8 @@
 > Заполнить `<…>` маркеры. Запускается ПОСЛЕДОВАТЕЛЬНО — один Playwright-браузер на сессию.
 
 ## Задача
-Прогнать кейсы Tier B (UI) набора `<AREA>` в кластере `<N>` через Playwright.
+Прогнать Tier B и UI-части A+B ID набора `<AREA>` через Playwright. Reconcile evidence под
+исходным ID; не создавать отдельный PASS для UI-дубля.
 
 **Метод:** Playwright MCP (`mcp__plugin_playwright_playwright__browser_navigate`/`snapshot`/`click`/
 `type`/`file_upload`/`console_messages`/`network_requests`/…).
@@ -32,7 +33,9 @@
 4. После каждого: `browser_console_messages level=error` (нет критических),
    `browser_network_requests filter='/gateway/<service>/'` (нет 4xx/5xx на critical paths).
 5. Визуальные кейсы — `browser_take_screenshot` в `reports/screenshots/`.
-6. Записать: `<ID>: PASSED|FAILED|SKIPPED — <одна строка / путь к скриншоту>`.
+6. Для journey проверить durable terminal oracle: save/reload/reopen, process/sink и forbidden
+   effects, а не только rendering/action card.
+7. Записать: `<ID>: PASS|FAIL|BLOCKED|NOT_RUN — <terminal evidence / screenshot>`.
 
 ## Ограничения
 - ⚠ Один браузер — не открывать parallel tabs без необходимости.
@@ -43,7 +46,7 @@
 ```
 Subagent: tier-b-<AREA>  •  Cluster: <N>  •  Run-id: <RUN_ID>
 Результат:
-  <ID>: PASSED|FAILED|SKIPPED — <comment>
+  <ID>: PASS|FAIL|BLOCKED|NOT_RUN — <terminal evidence; forbidden effects; cleanup>
 Console/network проблемы:
   <ID>: <list>
 Скриншоты: reports/screenshots/<file>

@@ -1,0 +1,2 @@
+surface_id	kind	source	operation	capability	included	case_ids	exclusion_reason	owner
+SURF-1	rest	src/path/Controller.kt	POST /api/example	<capability>	yes	F1	-	<owner>

@@ -31,34 +31,36 @@ python3 -c "from PIL import Image; img=Image.open('out.png'); print(img.mode, im
 
 ```bash
 BASE=<base_url>/gateway/<service>      # из выбранного стенда, НЕ хардкод localhost
-AUTH='-u admin:admin'                  # BASIC для local; для удалённого — OIDC-cookie/токен
+BASIC_AUTH=admin:admin                 # только BASIC local
+BEARER_TOKEN=                          # либо OIDC bearer для удалённого стенда
+AUTH_ARGS=()
+[ -n "$BASIC_AUTH" ] && AUTH_ARGS=(-u "$BASIC_AUTH")
+[ -n "$BEARER_TOKEN" ] && AUTH_ARGS=(-H "Authorization: Bearer $BEARER_TOKEN")
 ```
 
 ⚠ Auth зависит от стенда (см. `environment.md` §2). BASIC `-u admin:admin` — только когда стенд
 явно с `ENABLE_OIDC_FULL_ACCESS=false`. Для удалённых стендов — токен/cookie из аутентифицированной
-сессии.
+сессии. Не хранить `-u user:pass` строкой и не рассчитывать на shell word splitting.
 
 ### Async-polling паттерн (типовой для платформенных async-API)
 
 Многие платформенные эндпоинты возвращают `requestId` и обрабатываются асинхронно:
 
-```bash
-# 1. Отправить запрос → 202 + {requestId}
-RESP=$(curl -sS $AUTH -X POST "$BASE/<async-endpoint>" \
-  -H 'Content-Type: application/json' -d '<payload>')
-REQ_ID=$(echo "$RESP" | jq -r .requestId)
+Использовать fail-closed helper вместо копирования циклов:
 
-# 2. Поллинг до готовности
-for i in $(seq 1 60); do
-  POLL=$(curl -sS $AUTH "$BASE/<status-endpoint>/$REQ_ID" -w '|HTTP=%{http_code}')
-  CODE=${POLL##*|HTTP=}; BODY=${POLL%|HTTP=*}
-  if [ "$CODE" = "200" ] && echo "$BODY" | jq -e .result >/dev/null 2>&1; then
-    echo "$BODY" | jq .result; break
-  fi
-  if [ "$CODE" = "500" ]; then echo "ERROR: $BODY"; break; fi
-  sleep 2
-done
+```bash
+export BASIC_AUTH=admin:admin  # или BEARER_TOKEN; не оба
+python3 "${CLAUDE_SKILL_DIR}/scripts/async-http.py" submit \
+  --url "$BASE/<async-endpoint>" --data-file request.json
+python3 "${CLAUDE_SKILL_DIR}/scripts/async-http.py" poll \
+  --url "$BASE/<status-endpoint>/<requestId>" --attempts 60 --interval 2
+python3 "${CLAUDE_SKILL_DIR}/scripts/async-http.py" cancel \
+  --url "$BASE/<status-endpoint>/<requestId>"
 ```
+
+Helper требует exact `202` на submit, продолжает только на `202` polling, завершает только на `200`
+с JSON, а timeout/unexpected status/invalid JSON возвращает non-zero. Если конкретный endpoint имеет
+другой документированный контракт, зафиксировать его в case и передать explicit expected status.
 
 Типовой контракт: `POST` → `202 {requestId}`; `GET .../{requestId}` → `202 {status:processing}`
 пока обрабатывается, `200 {result}` при готовности, `500 {error}` при ошибке; `DELETE .../{requestId}`
@@ -69,7 +71,7 @@ done
 Многие фичи не имеют собственного multipart-эндпоинта — файл грузится в ECOS, ref передаётся дальше:
 
 ```bash
-curl -sS $AUTH -X POST "<base_url>/gateway/emodel/api/ecos/webapp/content" \
+curl -sS "${AUTH_ARGS[@]}" -X POST "<base_url>/gateway/emodel/api/ecos/webapp/content" \
   -F "file=@<path-to-file>"
 # → {"entityRef":"emodel/temp-file@<uuid>"}
 ```

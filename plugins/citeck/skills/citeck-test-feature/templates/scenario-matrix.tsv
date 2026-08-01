@@ -1,0 +1,13 @@
+capability	dimension	applicable	required	case_ids	rationale
+<capability>	happy	yes	yes	F1	terminal journey
+<capability>	reject-cancel	no	no	-	<why this state transition cannot occur>
+<capability>	invalid-boundary	no	no	-	<why inputs have no relevant boundaries>
+<capability>	duplicate	no	no	-	<why duplicate submission cannot occur>
+<capability>	stale-forged	no	no	-	<why persisted/action identifiers are absent>
+<capability>	principal-acl	no	no	-	<why capability is not principal-sensitive>
+<capability>	concurrency	no	no	-	<why shared mutable state is absent>
+<capability>	dependency-failure	no	no	-	<why no dependency can fail>
+<capability>	retry	no	no	-	<why operation cannot be retried>
+<capability>	timeout-retention	no	no	-	<why state has no lifetime>
+<capability>	clear-restart	no	no	-	<why session/process restart is irrelevant>
+<capability>	cleanup	yes	yes	F1	run-owned fixture cleanup

@@ -7,19 +7,21 @@ DURABLE-ядро: как раскладывать кейсы по tier'ам и �
 
 | Tier | Описание | Метод | Параллелизация |
 |---|---|---|---|
-| **A** | API-only (большинство кейсов) — `[HTTP]+[RA]+[LOG]+[U]` | scripted curl + Records API + лог-чек | Свободная (внутри одного кластера) — несколько субагентов параллельно |
-| **B** | UI E2E smoke — `[PW]` | Playwright | Последовательно (один браузер на сессию) |
+| **A** | API/Records/log/unit evidence | scripted HTTP + Records API + log/unit | Параллельно только без общего resource lock |
+| **B** | UI evidence | Playwright | Последовательно, один браузер |
+| **A+B** | Один cross-tier case ID | Tier A evidence → Tier B terminal reconciliation | По execution DAG |
 
-**Принцип:** UI-логика проверяется через REST API того же эндпоинта, что использует фронт. В Tier B
-остаются только happy-path E2E (контракт фронт↔бэк), visual rendering и UX-зависимый gating. Это
-держит число медленных UI-кейсов маленьким (обычно единицы), а остальное гоняется параллельно через API.
+**Принцип:** tier описывает канал доказательства, а `kind=contract|journey|guard` — смысл кейса.
+Backend matrices обычно остаются быстрыми Tier A contract cases. Tier B покрывает каждый уникальный
+interaction contract: gating, rendering, Apply/save, reload/reconnect, error recovery и terminal
+user journey. UI не заменяется REST там, где acceptance относится к поведению пользователя.
 
 ⚠ **Modality → Tier routing.** Если модальность ввода фичи **недостижима через UI** (напр. тип файла
 не входит в `accept`-list загрузчика, действие доступно только через API/скрипт, фича за
-feature-флагом без UI-входа) — соответствующие кейсы **обязаны** идти в **Tier A** (scripted HTTP по
-тому же эндпоинту, что дёргает фронт), а UI-двойник помечается `SKIP — недостижимо через UI
-(покрыто <ID> через HTTP)`. Не пытаться «обойти» загрузчик в Playwright — проверять контракт через
-API. В Tier B тогда остаётся только то, что реально доступно пользователю в UI.
+feature-флагом без UI-входа) — соответствующие кейсы идут в **Tier A** по поддерживаемому external
+entry point. Это terminal journey только если API/интеграция и есть публичный продуктовый вход.
+Если функциональность должна быть доступна через UI, её недостижимость — `BLOCKED/FAIL`, а не `SKIP`
+с заменой HTTP-кейсом.
 
 Tier-разметка проставляется в шапке каждого кейса: `Tier:`, `Cluster:`, `Tools:`, `Subagent:`.
 
@@ -33,7 +35,8 @@ Tier-разметка проставляется в шапке каждого к
 - Кластеры 2..N — по одному config-toggle каждый (feature-флаг off, лимиты, альт-провайдер, TTL и т.п.).
 
 Правила:
-- Внутри кластера сервис стартует **один раз**; кейсы гоняются в любом порядке (после smoke draft).
+- Внутри кластера сервис стартует **один раз**; порядок задаёт execution DAG по dependencies и
+  resource locks.
 - Между кластерами — единичный edit `application.yml` (или patch исходника, если флаг
   не вынесен в конфиг) + restart.
 - **Параллелизм невозможен МЕЖДУ кластерами** (один локальный сервис), но **внутри** кластера
@@ -60,12 +63,15 @@ grep -i "<config-key>" target/logs/<service>.log   # либо проверить
 ```
 
 ### Return-to-defaults (после последнего кластера)
-```bash
-git checkout -- src/main/resources/config/application.yml \
-                $(grep -rl '<patched-class>' src/main/kotlin 2>/dev/null)
-# rebuild + restart при необходимости финал-smoke
-git status   # ⚠ ничего тестового не должно остаться
-```
+
+Предпочитать env override, отдельный Spring profile или additional config location. Если нужен edit:
+
+1. До изменения сохранить список dirty-файлов, checksum и backup только target-файла.
+2. Если target уже изменён пользователем — не патчить его; выбрать overlay или остановиться.
+3. Перед restore убедиться, что файл всё ещё равен ожидаемому test-patched checksum.
+4. Восстановить backup и проверить, что итоговый diff равен captured baseline.
+
+Не использовать destructive Git restore-команды: они могут удалить изменения пользователя.
 
 ## ID-конвенции кейсов
 
@@ -95,9 +101,12 @@ git status   # ⚠ ничего тестового не должно остат�
 - T-кейсы пройдены (или нерабочие инструменты явно зафиксированы);
 - unit-suite зелёный;
 - все R-кейсы пройдены без замечаний;
-- feature-кейсы (F/I/…) пройдены или явно `SKIP` с обоснованием;
+- для `full` каждый `required=yes` case имеет ровно один report row со статусом `PASS`;
+- `FAIL/BLOCKED/NOT_RUN/SKIP/PARTIAL` в required full case означает `NOT_READY`;
 - provider/variant matrices пройдены минимум на одном варианте каждой строки;
 - C-кейсы (console/network/logs/audit) — без ошибок;
-- после config-кластеров выполнен return-to-defaults (`git status` чист).
+- все included inventory surfaces присутствуют в traceability и не имеют orphan case/runner;
+- HEAD совпадает с `DEPLOYED_SHA`, blocking decisions закрыты;
+- после config-кластеров captured dirty baseline восстановлен без потери пользовательских изменений.
 
 Только после этого ветка готова к MR.

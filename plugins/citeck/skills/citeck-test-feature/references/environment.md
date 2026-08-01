@@ -36,13 +36,14 @@ DURABLE-ядро: выбор стенда, MCP-профили, auth, **safety-п
 
 ```bash
 BASE=<base_url>            # напр. http://localhost  или  https://qa.example.ru
-AUTH='-u admin:admin'     # или OIDC-cookie для удалённого стенда
+BASIC_AUTH=admin:admin     # только для BASIC local
+AUTH_ARGS=(-u "$BASIC_AUTH")  # для OIDC использовать bearer/cookie array
 
 # 1. Records API через MCP живой
 mcp__citeck__test_connection            # url должен == <base_url>
 
 # 2. Целевой сервис отвечает (health-check эндпоинт фичи; ниже — generic gateway ping)
-curl -sS $AUTH "$BASE/gateway/<service>/<health-or-availability-endpoint>" -w '|HTTP=%{http_code}'
+curl -sS "${AUTH_ARGS[@]}" "$BASE/gateway/<service>/<health-or-availability-endpoint>" -w '|HTTP=%{http_code}'
 
 # 3. Список webapps (опц. — для проверки, что нужные сервисы подняты)
 #    конкретный путь зависит от платформы; см. профиль-пример examples/
@@ -144,7 +145,7 @@ stands:
 - `mcp__plugin_playwright_playwright__*`
 - Citeck MCP read: `records_query`, `test_connection`, `search_issues`, `query_comments`,
   `list_profiles`
-- `Bash(curl -* <base_url>/*)`, `Bash(jq *)`, `Bash(python3 -c*PIL*)`
+- `Bash(curl -* <base_url>/*)`, `Bash(python3 *async-http.py*)`, `Bash(jq *)`, `Bash(python3 -c*PIL*)`
 - (локально) `Bash(docker ps:*)`, `Bash(docker logs *<namespace>*:*)`
 
 С подтверждением **намеренно** остаются: `records_mutate`, правки `application.yml`/исходников,

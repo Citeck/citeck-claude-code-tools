@@ -25,12 +25,13 @@
 ## Кейсы
 | ID | Tier | Из файла | Краткое описание |
 |---|---|---|---|
-| `<ID>` | `<A|B>` | `cases/<…>.md` | `<…>` |
+| `<ID>` | `<A|B|A+B>` | `cases/<…>.md` | `<…>` |
 
 ## Шаги
 1. Verify config применён: `grep -i "<config-key>" <log>` либо health-эндпоинт.
 2. Прогнать кейсы из таблицы.
-3. Записать: `<ID>: PASSED|FAILED|SKIPPED — <comment>`.
+3. Соблюдать dependencies/resource locks; A+B reconciliate под одним ID.
+4. Записать: `<ID>: PASS|FAIL|BLOCKED|NOT_RUN — <terminal evidence>`.
 
 ## Ограничения
 - ⚠ НЕ менять config во время прогона.
@@ -43,6 +44,6 @@
 Subagent: cluster-<N>-<SHORT-NAME>  •  Run-id: <RUN_ID>
 Config applied: <short summary>
 Результат:
-  <ID>: PASSED|FAILED|SKIPPED — <comment>
+  <ID>: PASS|FAIL|BLOCKED|NOT_RUN — <terminal evidence; forbidden effects; cleanup>
 Готов к переходу на cluster <N+1>.
 ```

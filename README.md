@@ -120,7 +120,7 @@ The plugin provides an MCP server with the following tools, available as `mcp__c
 | [citeck-changes-to-task](plugins/citeck/skills/citeck-changes-to-task/SKILL.md) | Create a Citeck Project Tracker issue from current git changes |
 | [citeck-changes-to-task-md](plugins/citeck/skills/citeck-changes-to-task-md/SKILL.md) | Generate task.md file with structured task description from git changes |
 | [citeck-ask-docs](plugins/citeck/skills/citeck-ask-docs/SKILL.md) | Ask a question about Citeck — semantic search over citeck-docs with cited answer |
-| [citeck-test-feature](plugins/citeck/skills/citeck-test-feature/SKILL.md) | Plan and run acceptance testing for a Citeck feature on a chosen stand — scaffolds a dated test-plan folder, lays cases across tiers and config clusters |
+| [citeck-test-feature](plugins/citeck/skills/citeck-test-feature/SKILL.md) | Design, audit and run smoke, impact or full Citeck regression with code-surface inventory, terminal E2E traceability, validated manifests and optimized tier/cluster execution |
 
 ### citeck-auth
 

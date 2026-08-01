@@ -1,0 +1,2 @@
+case_id	case_file	kind	tier	cluster	required	scopes	runner_prompt	dependencies	resource_lock	capability
+F1	cases/feature.md	journey	A+B	1	yes	smoke,impact,full	subagent-prompts/tier-a-feature.md,subagent-prompts/tier-b-ui.md	none	feature-fixture	<capability>

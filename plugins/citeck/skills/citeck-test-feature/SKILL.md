@@ -1,7 +1,7 @@
 ---
 name: citeck-test-feature
-description: "Plan and run acceptance testing for a new Citeck platform feature on a chosen stand. Scaffolds a dated test-plan folder (cases/reports/subagent-prompts/test-data), uses Citeck MCP + Playwright MCP + scripted HTTP, and lays cases out across tiers and config clusters. Use when the user wants to test/QA a new Citeck feature, branch, or tracker issue end-to-end."
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp__citeck__test_connection, mcp__citeck__list_profiles, mcp__citeck__reauthenticate, mcp__citeck__records_query, mcp__citeck__records_mutate, mcp__citeck__search_issues, mcp__citeck__query_comments, mcp__plugin_playwright_playwright__browser_navigate, mcp__plugin_playwright_playwright__browser_snapshot, mcp__plugin_playwright_playwright__browser_click, mcp__plugin_playwright_playwright__browser_type, mcp__plugin_playwright_playwright__browser_fill_form, mcp__plugin_playwright_playwright__browser_file_upload, mcp__plugin_playwright_playwright__browser_wait_for, mcp__plugin_playwright_playwright__browser_take_screenshot, mcp__plugin_playwright_playwright__browser_console_messages, mcp__plugin_playwright_playwright__browser_network_requests, mcp__plugin_playwright_playwright__browser_evaluate, mcp__plugin_playwright_playwright__browser_run_code_unsafe, mcp__plugin_playwright_playwright__browser_close
+description: "Design, audit and run smoke, impact, acceptance or full regression testing for Citeck features. Inventories code/API/UI/state-machine surfaces, creates traceable contract/journey/guard cases, scaffolds a validated test-plan, and executes it with Citeck MCP, Playwright and scripted HTTP. Use for a feature, branch, tracker issue, microservice regression or coverage review."
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp__citeck__test_connection, mcp__citeck__list_profiles, mcp__citeck__set_active_profile, mcp__citeck__set_records_profile, mcp__citeck__reauthenticate, mcp__citeck__records_query, mcp__citeck__records_mutate, mcp__citeck__search_issues, mcp__citeck__query_comments, mcp__plugin_playwright_playwright__browser_navigate, mcp__plugin_playwright_playwright__browser_snapshot, mcp__plugin_playwright_playwright__browser_click, mcp__plugin_playwright_playwright__browser_type, mcp__plugin_playwright_playwright__browser_fill_form, mcp__plugin_playwright_playwright__browser_file_upload, mcp__plugin_playwright_playwright__browser_wait_for, mcp__plugin_playwright_playwright__browser_take_screenshot, mcp__plugin_playwright_playwright__browser_console_messages, mcp__plugin_playwright_playwright__browser_network_requests, mcp__plugin_playwright_playwright__browser_evaluate, mcp__plugin_playwright_playwright__browser_run_code_unsafe, mcp__plugin_playwright_playwright__browser_close
 ---
 
 # Citeck Test Feature
@@ -24,20 +24,24 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp_
 | `references/tools-cheatsheet.md` | Перед HTTP/RA-кейсами — теги, gateway harness, async-polling |
 | `references/records-api-patterns.md` | Перед setup/verify через Records API |
 | `references/playwright-tips.md` | Перед UI-кейсами (Tier B) |
-| `references/test-case-design.md` | Шаг 4 — уровни тестирования, типы кейсов, принципы составления |
-| `references/tier-cluster-model.md` | Шаг 4 — раскладка по tier'ам/кластерам, ID-конвенции, done-criteria |
-| `references/subagent-orchestration.md` | Шаг 7 — оркестрация субагентов, «что делать если» |
+| `references/test-case-design.md` | Шаг 5 — уровни тестирования, типы кейсов, принципы составления |
+| `references/coverage-model.md` | Шаги 4–5 и 9 — inventory, terminal E2E, state matrix, full gate |
+| `references/tier-cluster-model.md` | Шаги 5 и 9 — раскладка по tier'ам/кластерам, ID-конвенции, done-criteria |
+| `references/subagent-orchestration.md` | Шаг 8 — оркестрация субагентов, «что делать если» |
 | `examples/citeck-ai-assistant.md` | Если тестируется AI-ассистент — профиль-пример |
-| `templates/*` | Шаг 5 — шаблоны генерируемой папки плана |
-| `scripts/*.py` | Шаг 6 — генераторы фикстур (PDF/DOCX/TXT/PNG), требуют `python3 + PIL/reportlab/python-docx` |
+| `templates/*` | Шаг 6 — шаблоны плана, inventory, manifest, traceability и отчёта |
+| `scripts/*.py` | Шаги 4, 6–7, 9 — discovery/scaffold/validate/HTTP helpers и генераторы фикстур |
 
 ## Flow
 
-### 1. Сбор входных данных
+### 1. Сбор входных данных и режим
 Через `AskUserQuestion` (если не заданы): фича/ветка, tracker-issue (опц.), целевой
-проект/микросервис, **целевой стенд** (profile/URL). Если задан issue —
+проект/микросервис, **целевой стенд** (profile/URL) и `SCOPE=smoke|impact|full`. Если задан issue —
 `mcp__citeck__search_issues` + `mcp__citeck__query_comments` для деталей и контекста (картинки
 авто-скачиваются — прочитать их Read'ом).
+
+`full` означает весь обязательный manifest; `impact` — dependency closure затронутых capabilities +
+permanent defect guards; `smoke` — только liveness/golden journey и никогда не даёт release verdict.
 
 ### 2. ⚠ Safety-гейт (deny-by-default для деструктива)
 Прочитать `${CLAUDE_SKILL_DIR}/references/environment.md`. Затем:
@@ -56,7 +60,8 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp_
   раньше, чем потрачено время на генерацию плана:
   ```bash
   docker info >/dev/null 2>&1 && echo "docker UP" || echo "docker DOWN"   # если стенд докеризован
-  curl -sS -m 8 $AUTH "$BASE/gateway/<service>/<health>" -w '|HTTP=%{http_code}'  # gateway жив?
+  AUTH_ARGS=(-u admin:admin) # только подтверждённый BASIC local; для OIDC — bearer/cookie array
+  curl -sS -m 8 "${AUTH_ARGS[@]}" "$BASE/gateway/<service>/<health>" -w '|HTTP=%{http_code}'
   ```
   Если gateway/`:80` refused или Docker down — **СТОП**, попросить пользователя поднять стенд;
   скаффолдить план можно (стенд для этого не нужен), но прогон не начинать.
@@ -75,28 +80,56 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, mcp_
 ### 3. Загрузка durable-контекста
 Прочитать нужные `references/*` под тип фичи. Если AI-ассистент — `examples/citeck-ai-assistant.md`.
 
-### 4. Скоупинг кейсов
-По диффу ветки / design-доку / описанию issue выделить новое поведение. Прочитать
+### 4. Discovery и инвентарь покрытия
+До генерации кейсов исследовать не только diff/issue, но и production/frontend code, существующие
+тесты, design/development plans, найденные баги, config properties и прошлые отчёты. Прочитать
+`references/coverage-model.md` и заполнить `surface-inventory.tsv`: controllers/endpoints, tools,
+consumers/external tasks/schedulers, state/actions, flags/limits/providers, record types/external
+sinks и UI entry points. У каждой включённой поверхности должен быть case ID; исключение требует
+причины и owner.
+
+Начальный inventory для типового Citeck repo:
+`python3 ${CLAUDE_SKILL_DIR}/scripts/discover-surfaces.py <project> --output <PLAN_DIR>/surface-inventory.tsv`.
+Это discovery hints, не готовый оракул: вручную добавить динамические routes/state transitions и
+review каждую строку.
+
+Для `impact` сначала построить `changed files -> capabilities -> dependency closure -> cases`.
+Для `full` delta не ограничивает скоуп.
+
+### 5. Проектирование и review кейсов
+Прочитать
 `references/test-case-design.md` — уровни тестирования (смоук/санити/приёмка/регресс/полное), типы
 кейсов (в т.ч. негатив/робастность, комплементарное покрытие «на отсутствие», темпоральное/TZ,
 матрицы-эталоны прав/атрибутов) и принципы составления (источник истины = спека+код; дизайн отделён
-от прогона; прогон = весь набор; расхождения спека↔код фиксировать открыто). Разложить по tier'ам
-(A=API-параллельно, B=UI-последовательно) и кластерам (минимизация рестартов). Присвоить ID
-(T/S/R/F/I/C — см. `references/tier-cluster-model.md`). До реализации зафиксировать два списка:
-unit-сценарии и приёмочный чек-лист.
+от прогона; прогон = весь набор; расхождения спека↔код фиксировать открыто).
+
+Каждый case получает `kind=contract|journey|guard`, `tier=A|B|A+B`, `scopes`, runner, case
+dependencies и resource lock. Для каждой included capability заполнить все строки
+`scenario-matrix.tsv`: happy/reject-cancel/invalid-boundary/duplicate/stale-forged/principal-acl/
+concurrency/dependency-failure/retry/timeout-retention/clear-restart/cleanup. Применимая строка
+обязана иметь case IDs, неприменимая — проверяемое обоснование. Заполнить
+`TRACEABILITY.md`: capability должна иметь terminal journey; contract/guard не заменяют E2E.
+
+PASS journey разрешён только после поддерживаемого entry point и durable business postcondition:
+requery/reopen, реальный sink/store/process и проверка запрещённых побочных эффектов. Preview, plan,
+tool call, progress или log — промежуточные assertions.
 
 ⚠ **Delta/follow-up issue.** Если фича — продолжение уже оттестированной (напр. issue ветвится от
 родительской feature-ветки), **не** диффать против `merge-base develop` — он захватит весь родитель
 и раздует скоуп (легко получить 20k+ строк чужого поведения). Вместо этого:
 - диффать **собственный commit-range** issue (`git log <parent-feature>..<issue-branch>` или диапазон
   её фикс-коммитов) и брать только `src/main`-файлы, отсеяв шум merge-коммитов из develop;
-- **переиспользовать** результаты прошлых прогонов (config-toggle кластеры, provider-матрицы),
-  явно пометив их out-of-scope со ссылкой на прошлый отчёт, а не гонять заново;
+- для `impact` можно использовать результаты прошлых прогонов как input выбора, но не как PASS
+  текущего case; `full` всегда выполняет весь required manifest на текущем deployed SHA;
 - центр delta-прогона — обычно один кластер (default) + узкая регрессия родителя по затронутым классам.
 
-### 5. Скаффолдинг папки (идемпотентно)
+### 6. Скаффолдинг папки (идемпотентно)
 В `<project>/docs/plans/<YYYY-MM-DD>-<issue>-test-plan/` из `templates/`: README (`plan-readme.md`),
-`cases/<section>.md`, `reports/<date>-<run-id>.md`, `subagent-prompts/<...>.md`, при нужде `test-data/`.
+`cases/<section>.md`, `reports/<date>-<run-id>.md`, `subagent-prompts/<...>.md`, при нужде `test-data/`,
+а также `case-manifest.tsv`, `surface-inventory.tsv`, `scenario-matrix.tsv`, `TRACEABILITY.md`,
+`OPEN-DECISIONS.md`.
+Предпочитать:
+`python3 ${CLAUDE_SKILL_DIR}/scripts/scaffold-plan.py --project-root ... --issue ... --feature ...`.
 **Защита от затирания:**
 - Корень плана создаётся **эксклюзивно** (create-only). Если папка уже есть — не перезаписывать
   молча: предложить `--resume` (дописать недостающее) либо новый прогон.
@@ -111,21 +144,36 @@ PLAN_DIR="<project>/docs/plans/<YYYY-MM-DD>-<issue>-test-plan"
 if [ -d "$PLAN_DIR" ]; then echo "EXISTS — resume или новый run-id, не затирать"; fi
 ```
 
-### 6. Pre-flight
-Smoke стенда (containers/порт/availability — см. `environment.md` §3). Генерация test-data при
+### 7. Design gate и pre-flight
+До live-прогона выполнить
+`python3 ${CLAUDE_SKILL_DIR}/scripts/validate-plan.py <PLAN_DIR>`. Orphan surface/case, missing
+runner, неполный case block, неизвестный trace ID или открытое blocking decision останавливают full.
+
+Зафиксировать `HEAD`, dirty baseline, `DEPLOYED_SHA`, profile/base URL, provider/model/config и
+dependency health. Smoke стенда (containers/порт/availability — см. `environment.md` §3).
+Генерация test-data при
 файловых кейсах: `python3 ${CLAUDE_SKILL_DIR}/scripts/make-text-files.py <out-dir>` и т.п.
 (скрипты платформо-агностичны).
 
-### 7. Прогон (оркестрация субагентов)
-Прочитать `references/subagent-orchestration.md`. Tier A — параллельно (несколько `Agent` в одном
-сообщении, внутри кластера); Tier B — последовательно (один браузер); кластеры — последовательно.
-После каждого субагента **дописывать** `reports/<date>-<run-id>.md`. ⚠ Return-to-defaults после
-config-кластеров.
+### 8. Прогон (оркестрация субагентов)
+Прочитать `references/subagent-orchestration.md`. Строить execution DAG из dependencies/resource
+locks: read-only Tier A параллельно; общие record/conversation/config locks последовательно; Tier B
+одним браузером. `A+B` имеет один итоговый ID: API runner передаёт fixture/output Tier B и до
+reconciliation не ставит PASS. После каждого субагента дописывать отчёт.
 
-### 8. Отчёт и гейт
+### 9. Отчёт, cleanup и гейт
 Заполнить summary / дефекты / verdict. Не отмечать готовым до прохождения done-criteria
-(`references/tier-cluster-model.md`): T, unit, R, F/I, matrices, C-кейсы, return-to-defaults (`git
-status` чист).
+(`references/tier-cluster-model.md`). Cleanup удаляет только run-owned данные и восстанавливает
+captured config baseline без destructive Git-команд.
+
+Для `full` каждый `required=yes` ID обязан быть `PASS`; `FAIL/BLOCKED/NOT_RUN/SKIP/PARTIAL` =
+`NOT_READY`. Проверить совпадение HEAD/DEPLOYED_SHA, report rows с manifest и повторно запустить
+`python3 ${CLAUDE_SKILL_DIR}/scripts/validate-plan.py <PLAN_DIR> --scope full --report <REPORT>`
+(`<REPORT>` — путь **относительно `<PLAN_DIR>`**, напр. `reports/<date>-<run-id>.md`).
+Для `smoke` и `impact` также передавать соответствующий `--scope` и `--report`; выполнение без
+отчёта не является прогоном. В отчёте smoke/impact обязательна строка `**Scope limitation:**`, а
+full-only пункты Final Gate («Unit and required integration», «Every required full-run case is
+PASS») остаются неотмеченными — их разрешено отмечать только на `full`.
 
 ## Оркестратор-памятка
 Компактная версия — в `references/subagent-orchestration.md` («Оркестратор-памятку» вставить в

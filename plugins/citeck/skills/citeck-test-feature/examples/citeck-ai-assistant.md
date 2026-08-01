@@ -4,10 +4,15 @@
 (`references/*`) кладётся на конкретную фичу. **Это пример, а не часть durable-методологии** —
 другие фичи заведут свой профиль. Референс-реализация: `citeck-ai/docs/plans/2026-05-07-coredev-159/`.
 
+> **Volatile snapshot:** endpoints, actions, models, limits and selectors below are discovery hints,
+> not source of truth. Before every new plan inventory current controllers/tools/config/UI and record
+> the tested commit in `surface-inventory.tsv`. Never copy a hardcoded HITL action without reading
+> the current response `actions[].id`.
+
 ## Окружение (специфика citeck-ai local)
 
 - Стенд: `citeck_*_<namespace>_default` (docker), citeck-ai запускается **локально через Maven**:
-  `./mvnw spring-boot:run` (профиль `local`), порт **8613**.
+  `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev,dev_local` (MCP profile `local`), порт **8613**.
 - ⚠ `docker logs citeck-ai` НЕ работает — сервис вне контейнера. Лог:
   `./mvnw spring-boot:run 2>&1 | tee target/logs/citeck-ai.log` (или `/tmp/citeck-ai.log`, если
   планируется `mvn clean`). Stdout агрессивно буферизуется — readiness проверять через
@@ -31,10 +36,16 @@
 | `DELETE` | `/api/assistant/universal/conversation/{conversationId}` | Clear-context |
 | `POST` | `/api/assistant/bpmn/async` | **Прямая BPMN-генерация/Q&A** (отдельный controller, timeout 10 мин) |
 | `GET`/`DELETE` | `/api/assistant/bpmn/{requestId}` | Polling/отмена BPMN |
+| `DELETE` | `/api/assistant/bpmn/conversation/{conversationId}` | Clear BPMN conversation |
 | `POST` | `/api/assistant/send-mail` | Отправка email |
 | `GET`  | `/api/assistant/availability` | Health-check (Boolean) |
-| `GET`  | `/api/ai-agent/available-providers` / `available-tools` | Список провайдеров / тулов |
+| `GET` | `/api/ai-agent/list` | Список доступных агентов |
+| `GET` | `/api/ai-agent/available-providers` / `available-tools` | Провайдеры / тулы |
 | `POST` | `/api/ai-agent/execute` | Прямое исполнение user-defined агента |
+| `GET` | `/api/call-recording/config` / `records` | Recording config и ACL-aware records |
+| `POST` | `/api/call-recording/session/start` | Старт owned recording session |
+| `POST` | `/api/call-recording/session/{id}/chunks` / `end` | Upload chunks и запуск обработки |
+| `GET` | `/api/call-recording/session/{id}/status` | Owned processing status |
 
 ⚠ Business-app генерация — НЕ отдельный endpoint: через `universal/async` с
 `detectedIntent=BUSINESS_APP_GENERATION` (распознаётся из текста). BPMN-генерация — отдельный
@@ -54,7 +65,7 @@ endpoint (`/api/assistant/bpmn/async`), universal-чат BPMN напрямую �
     "forceIntent": null,
     "agentRef": "emodel/ai-agent@<id>"
   },
-  "action": "confirm | file_cancel | main_content | attr:<name> | new_record | ..."
+  "action": "<exact current actions[].id>"
 }
 ```
 
@@ -67,17 +78,13 @@ endpoint (`/api/assistant/bpmn/async`), universal-чат BPMN напрямую �
 
 `workspaceId`/`mentionedRecords` — НЕ top-level поля API.
 
-### Action-id whitelist
-| Action | Назначение |
-|---|---|
-| `confirm`/`reject`/`escalate`/`cancel` | draft/plan flow |
-| `file_cancel` | отмена pending file |
-| `main_content` | сохранить pending в `_content` |
-| `attr:<name>` | сохранить pending в named attribute |
-| `new_record` | создать новую workspace-file запись из pending image |
+### Action contract
 
-⚠ `isFileSaveAction()` whitelist — только `main_content`/`attr:*`/`file_cancel`/`new_record`.
-Остальные НЕ роутятся в `FileSaveOrchestrator`.
+Action IDs belong to different state machines: plan, deploy, mutation, file/image save and
+escalation. Always take the exact value and case from the latest `result.actions[]`; send it as a
+top-level request field with the same `conversationId`. A label such as «Подтвердить» is not an API
+ID. Record current IDs and owning source code in the plan inventory instead of maintaining a static
+whitelist in this example.
 
 ### File upload контракт
 У ассистента НЕТ своего multipart-эндпоинта. Двухшаговый flow: (1) `curl -F "file=@..."
@@ -139,8 +146,8 @@ mcp__citeck__records_query(
 | 5 | gpt-image-2 | `citeck.ai.image.openai.model=gpt-image-2` |
 | 6 | TTL=1m (patch+ребилд) | `PendingFileSave.EXPIRY_MS = 1m` |
 
-⚠ После кластера 6 — вернуть `application.yml` и `PendingFileSave.EXPIRY_MS` в дефолт
-(`git checkout -- ...`), проверить `git status` перед MR.
+⚠ После кластера 6 восстановить captured config/source backup только если test-patched checksum не
+изменился. Итоговый diff должен совпасть с pre-run baseline; destructive Git restore запрещён.
 
 ## Verify-снайпеты (специфика)
 - temp-ref удалён после save: `records_query` на `emodel/temp-file@<id>` → `_notExists?bool == true`.

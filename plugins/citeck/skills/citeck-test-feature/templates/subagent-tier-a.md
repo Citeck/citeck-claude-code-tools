@@ -3,7 +3,7 @@
 > Заполнить `<…>` маркеры. Запускается ПАРАЛЛЕЛЬНО с другими Tier A субагентами того же кластера.
 
 ## Задача
-Прогнать кейсы Tier A (API-only) набора `<AREA>` в кластере `<N>`.
+Прогнать Tier A evidence для назначенных contract/journey/guard ID набора `<AREA>` в кластере `<N>`.
 
 **Метод:** scripted HTTP (`curl` через `<BASE_URL>/gateway/<service>/...`) + Records API
 (`mcp__citeck__records_query`/`records_mutate`, profile `<PROFILE>`) + лог сервиса.
@@ -26,7 +26,10 @@
 1. Прочитать раздел кейса целиком (Шаги + Acceptance).
 2. Выполнить шаги (HTTP harness из cheatsheet).
 3. Проверить Acceptance: HTTP-ответ (`jq`), Records API (`records_query`), лог (`grep`).
-4. Записать результат: `<ID>: PASSED|FAILED|SKIPPED — <одна строка>`.
+4. Проверить terminal oracle, forbidden side effects и cleanup из case block.
+5. Для A+B передать exact fixture refs/input/output/request IDs Tier B и поставить
+   `BLOCKED(PENDING_UI)`, не PASS.
+6. Записать результат: `<ID>: PASS|FAIL|BLOCKED|NOT_RUN — <terminal evidence>`.
 
 ## Ограничения
 - ⚠ Profile `<PROFILE>`, стенд `<BASE_URL>`. Если `test_connection` вернёт другой url — STOP,
@@ -41,7 +44,8 @@
 ```
 Subagent: tier-a-<AREA>  •  Cluster: <N>  •  Run-id: <RUN_ID>
 Результат:
-  <ID>: PASSED|FAILED|SKIPPED — <comment>
+  <ID>: PASS|FAIL|BLOCKED|NOT_RUN — <terminal evidence; forbidden effects; cleanup>
+A+B handoff: <ID> — <fixture refs/input/output/request IDs>
 Найденные дефекты:
   - <description>, repro: <curl/log>
 ```
