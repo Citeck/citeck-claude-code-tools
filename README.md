@@ -50,16 +50,40 @@ Install uv if you don't have it:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 1. Add the marketplace
+### Option A: from the shell (recommended)
+
+Run these commands in a regular terminal (not inside a Claude Code session):
 
 ```bash
-/plugin marketplace add Citeck/citeck-claude-code-tools
+claude plugin marketplace add Citeck/citeck-claude-code-tools
+claude plugin install citeck@citeck
 ```
 
-### 2. Install the plugin
+`citeck@citeck` means `<plugin>@<marketplace>`. Verify with:
 
 ```bash
+claude plugin list
+```
+
+### Option B: from inside a Claude Code session
+
+Start `claude` in a terminal and type the slash commands at the prompt (they are interactive commands of the Claude Code CLI, not shell commands):
+
+```
+/plugin marketplace add Citeck/citeck-claude-code-tools
 /plugin install citeck@citeck
+```
+
+Or run `/plugin` and use the interactive UI: **Marketplaces** → **Add marketplace**, then **Discover** → `citeck` → **Install**.
+
+> Note: slash commands work only in the terminal CLI. The Claude desktop app and IDE extensions pick up plugins installed via Option A.
+
+### Local development (no install)
+
+To try the plugin straight from this repository:
+
+```bash
+claude --plugin-dir ./plugins/citeck
 ```
 
 The MCP server starts automatically via `uv run` — dependencies are installed on first launch, no manual setup needed.
