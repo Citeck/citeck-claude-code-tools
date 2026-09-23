@@ -41,6 +41,7 @@ Skills (user-invocable via /citeck:<name>)
   └── citeck-auth: PKCE browser flow (runs Python scripts)
   └── citeck-changes-to-task: workflow orchestration (uses MCP tools)
   └── citeck-changes-to-task-md: generates task.md from git changes
+  └── citeck-planfact: plan/fact/delta report for an EPT project (runs Python script over lib/records_api)
 ```
 
 ### MCP Server (`servers/citeck_mcp.py`)
@@ -68,6 +69,7 @@ Skills under `skills/`:
 - `citeck-auth` — PKCE browser flow, runs Python scripts via `Bash(python3 ...)`
 - `citeck-changes-to-task` — workflow skill using MCP tools
 - `citeck-changes-to-task-md` — generates task.md, uses git + Write (no MCP)
+- `citeck-planfact` — plan/fact/delta report for an EPT project; `scripts/planfact.py` pages `emodel/ept-issue` via `lib/records_api`; the arithmetic (`1w 2d 3h` parser, epic rule "children or own", 8/40/160 norms) is covered by `tests/test_planfact.py`
 - `citeck-test-feature` — guide + scaffolder for feature acceptance testing; `references/` (durable methodology), `examples/` (profile), `templates/` (generated plan), `scripts/` (fixture generators). Uses Citeck MCP + Playwright MCP (`mcp__plugin_playwright_playwright__*`) + scripted HTTP
 
 ## Testing patterns
