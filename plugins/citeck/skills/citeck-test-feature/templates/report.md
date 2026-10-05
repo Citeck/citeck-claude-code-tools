@@ -3,6 +3,7 @@
 **Date:** <DATE>  •  **Run-id:** `<RUN_ID>`  •  **Scope:** `<smoke|impact|full>`
 **Tester:** <AUTHOR>
 **Browser mode:** `<visible|headless>`  •  **Reason/approval for headless:** <if applicable>
+**Browser focus:** <launch method; observed focus changes or NOT_CHECKED; request to show tab, if any>
 **Environment:** `<BASE_URL>` (profile `<PROFILE>`, `<CLASSIFICATION>`)
 **Source:** `<BRANCH>` @ `<HEAD_SHA>`  •  **Deployed:** `<DEPLOYED_SHA>`
 **Provider/model/config:** <values>  •  **Dirty baseline:** <captured paths or clean>
