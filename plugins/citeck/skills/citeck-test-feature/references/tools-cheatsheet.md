@@ -1,5 +1,7 @@
 # Reference: Tools Cheatsheet
 
+`SKILL_DIR` — абсолютный путь к каталогу `citeck-test-feature`, содержащему прочитанный `SKILL.md`.
+
 DURABLE-ядро: палитра инструментов, теги для маркировки кейсов и **generic gateway HTTP harness**.
 Платформо-агностично. Конкретные эндпоинты тестируемой фичи держать в `examples/` или в `cases/`
 сгенерированного плана, не здесь.
@@ -10,8 +12,8 @@ DURABLE-ядро: палитра инструментов, теги для ма�
 
 | Тег | Инструмент | Когда использовать |
 |---|---|---|
-| `[RA]` | **Records API** — `mcp__citeck__records_query` / `records_mutate` | Setup тестовых данных и verify артефактов после операции. |
-| `[PW]` | **Playwright** — `mcp__plugin_playwright_playwright__browser_*` | Многошаговый UI, кнопки, file upload, превью, визуальные проверки. См. `playwright-tips.md`. |
+| `[RA]` | **Records API** — `records_query` / `records_mutate` | Setup тестовых данных и verify артефактов после операции. |
+| `[PW]` | **Playwright** — `browser_*` | Многошаговый UI, кнопки, file upload, превью, визуальные проверки. См. `playwright-tips.md`. |
 | `[HTTP]` | **Scripted HTTP** — `curl` на `<base_url>/gateway/<service>/...` + polling | Concurrency, exotic-эндпоинты, rate-limit, прямые контракты API. |
 | `[LOG]` | **Log inspection** — `tail`/`docker logs` лог сервиса | Системные сообщения, audit, режимы работы, трассировка. |
 | `[FS]` | **Filesystem/Docker** — `docker ps`, правки `application.yml` + restart | Toggle-кейсы (config-кластеры). |
@@ -50,11 +52,11 @@ AUTH_ARGS=()
 
 ```bash
 export BASIC_AUTH=admin:admin  # или BEARER_TOKEN; не оба
-python3 "${CLAUDE_SKILL_DIR}/scripts/async-http.py" submit \
+python3 "${SKILL_DIR}/scripts/async-http.py" submit \
   --url "$BASE/<async-endpoint>" --data-file request.json
-python3 "${CLAUDE_SKILL_DIR}/scripts/async-http.py" poll \
+python3 "${SKILL_DIR}/scripts/async-http.py" poll \
   --url "$BASE/<status-endpoint>/<requestId>" --attempts 60 --interval 2
-python3 "${CLAUDE_SKILL_DIR}/scripts/async-http.py" cancel \
+python3 "${SKILL_DIR}/scripts/async-http.py" cancel \
   --url "$BASE/<status-endpoint>/<requestId>"
 ```
 

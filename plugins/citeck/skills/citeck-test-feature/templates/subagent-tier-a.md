@@ -6,7 +6,7 @@
 Прогнать Tier A evidence для назначенных contract/journey/guard ID набора `<AREA>` в кластере `<N>`.
 
 **Метод:** scripted HTTP (`curl` через `<BASE_URL>/gateway/<service>/...`) + Records API
-(`mcp__citeck__records_query`/`records_mutate`, profile `<PROFILE>`) + лог сервиса.
+(`records_query`/`records_mutate`, profile `<PROFILE>`) + лог сервиса.
 **Стенд:** `<BASE_URL>`, классификация `<CLASSIFICATION>`. **Run-id:** `<RUN_ID>`,
 песочница `<TEST_WORKSPACE>`.
 

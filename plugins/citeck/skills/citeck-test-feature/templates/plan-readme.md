@@ -9,9 +9,9 @@
 
 ## TL;DR
 
-Прогон acceptance-плана для **<ISSUE>** на стенде `<BASE_URL>` через Claude Code + MCP:
+Прогон acceptance-плана для **<ISSUE>** на стенде `<BASE_URL>` через Claude Code или Codex + MCP:
 Citeck MCP (`records_query`/`records_mutate`, profile `<PROFILE>`), Playwright MCP
-(`mcp__plugin_playwright_playwright__browser_*`), scripted HTTP (`curl <BASE_URL>/gateway/...`),
+(`browser_*`), scripted HTTP (`curl <BASE_URL>/gateway/...`),
 сборка (`./mvnw test` / `./gradlew test`).
 
 Кейсы имеют kind `contract|journey|guard`, evidence tier `A|B|A+B`, config cluster, dependencies и
@@ -24,7 +24,7 @@ resource lock. Прогон ведётся по execution DAG, а не фикс�
 - Прогон на стенде `<BASE_URL>` (profile `<PROFILE>`, классификация `<CLASSIFICATION>`).
 - Деструктив (`records_mutate`, рестарт, патч config) разрешён **только** если стенд
   `destructive_allowed: true` (см. skill `references/environment.md` §4) — иначе read-only.
-- Перед мутациями: `mcp__citeck__test_connection` → `url == <BASE_URL>`.
+- Перед мутациями: `test_connection` → `url == <BASE_URL>`.
 - Все мутации — в `<TEST_WORKSPACE>` + run-id `<RUN_ID>`, не задевать чужие данные.
 - ⚠ Запрещён переход на prod/неклассифицированный стенд (fail-closed).
 

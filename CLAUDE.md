@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Plugin for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) providing MCP server and skills for the [Citeck ECOS](https://www.citeck.ru/) platform. Everything lives under `plugins/citeck/`.
+Plugin for local Claude Code and Codex CLI providing MCP server and skills for the [Citeck ECOS](https://www.citeck.ru/) platform. Everything lives under `plugins/citeck/`.
 
 ## Commands
 
@@ -65,10 +65,10 @@ Used by both the MCP server and remaining skill scripts (citeck-auth).
 
 Skills under `skills/`:
 
-- `citeck-auth` — PKCE browser flow, runs Python scripts via `Bash(python3 ...)`
+- `citeck-auth` — PKCE browser flow, runs Python scripts using the client shell tool
 - `citeck-changes-to-task` — workflow skill using MCP tools
-- `citeck-changes-to-task-md` — generates task.md, uses git + Write (no MCP)
-- `citeck-test-feature` — guide + scaffolder for feature acceptance testing; `references/` (durable methodology), `examples/` (profile), `templates/` (generated plan), `scripts/` (fixture generators). Uses Citeck MCP + Playwright MCP (`mcp__plugin_playwright_playwright__*`) + scripted HTTP
+- `citeck-changes-to-task-md` — generates task.md, uses git and file writing (no MCP)
+- `citeck-test-feature` — guide + scaffolder for feature acceptance testing; `references/` (durable methodology), `examples/` (profile), `templates/` (generated plan), `scripts/` (fixture generators). Uses Citeck MCP + available Playwright MCP or browser tools + scripted HTTP
 
 ## Testing patterns
 
@@ -85,3 +85,11 @@ Skills under `skills/`:
 ## Commit style
 
 Conventional commits: `feat:`, `fix:`, `refactor:`, `chore:`.
+
+## Codex packaging
+
+`.agents/plugins/marketplace.json` exposes the same plugin for Codex.
+`plugins/citeck/.codex-plugin/plugin.json` uses `.mcp.codex.json` with plugin-relative `cwd`.
+Both manifests must have the same name/version. Skills are shared; client tool prefixes and
+permissions are resolved in the session. See `AGENTS.md` and
+`docs/plans/2026-10-05-codex-plugin-adaptation.md` for checks and current limitations.

@@ -236,12 +236,12 @@ def resolve_ept_profile(profile=None, config_dir=None):
         if profile is None and ept == resolved:
             raise ConfigError(
                 f"Profile '{resolved}' referenced by ept_profile is not configured. "
-                "Run '/citeck:citeck-auth' to add it, or call set_ept_profile with a "
+                "Run 'citeck-auth' to add it, or call set_ept_profile with a "
                 "valid profile name."
             )
         raise ConfigError(
             f"No credentials found for profile '{resolved}'. "
-            "Run '/citeck:citeck-auth' to configure."
+            "Run 'citeck-auth' to configure."
         )
     return resolved, creds
 
@@ -264,12 +264,12 @@ def resolve_records_profile(profile=None, config_dir=None):
         if profile is None and rec == resolved:
             raise ConfigError(
                 f"Profile '{resolved}' referenced by records_profile is not configured. "
-                "Run '/citeck:citeck-auth' to add it, or call set_records_profile with a "
+                "Run 'citeck-auth' to add it, or call set_records_profile with a "
                 "valid profile name."
             )
         raise ConfigError(
             f"No credentials found for profile '{resolved}'. "
-            "Run '/citeck:citeck-auth' to configure."
+            "Run 'citeck-auth' to configure."
         )
     return resolved, creds
 

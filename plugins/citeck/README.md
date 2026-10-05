@@ -1,6 +1,18 @@
-# Citeck ECOS Plugin for Claude Code
+# Citeck ECOS Plugin for Claude Code and Codex
 
-Plugin for interacting with Citeck ECOS instances from Claude Code CLI.
+Plugin for interacting with Citeck ECOS instances from local Claude Code and Codex CLI.
+
+## Installation and client support
+
+See [repository installation instructions](../../README.md#codex-cli) for local Codex CLI
+installation and updates. The Codex manifest is `.codex-plugin/plugin.json`; it uses
+`.mcp.codex.json` with `cwd: "./"`, resolved relative to the installed plugin in CLI 0.160.0.
+Claude Code uses `.claude-plugin/plugin.json` and the existing `.mcp.json` configuration.
+Both launch `servers/citeck_mcp.py` and share all five skills and `~/.citeck/` credentials.
+Codex startup timeout is 180 seconds; tool timeout is 300 seconds to cover two PKCE attempts.
+These are configured limits; a real browser login must still be verified on the target stand.
+Use `citeck-auth` for setup, then verify profiles and URLs with `list_profiles`.
+Do not use `codex mcp login` as a replacement for Citeck authentication.
 
 ## Architecture
 
@@ -8,7 +20,7 @@ This plugin uses an MCP server (FastMCP) as the primary transport layer. The ser
 
 ### MCP Tools
 
-All tools are available as `mcp__citeck__<tool_name>`:
+Tools below use logical names. Find the available Citeck MCP tools by their descriptions; client prefixes may differ:
 
 - `ping` — health-check: verify the MCP server is running
 - `test_connection` — verify auth connection
@@ -18,7 +30,7 @@ All tools are available as `mcp__citeck__<tool_name>`:
 - `set_project_default` — set the default project for operations
 - `search_issues` — search issues with filters
 - `preview_issue` — read-only, human-readable preview of an issue create/update (refs resolved to names, description rendered from Lexical HTML); call before `create_issue`/`update_issue`
-- `create_issue` — create an issue (always creates; preview via `preview_issue`)
+- `create_issue` — create an issue after `preview_issue`; pass the confirmed preview `server` as `expected_server` to reject target changes before the HTTP write
 - `update_issue` — update an issue (always updates; preview via `preview_issue`)
 - `preview_comment` — read-only, human-readable preview of a comment; call before `add_comment`
 - `add_comment` — add a comment to an issue (always posts; preview via `preview_comment`)
@@ -130,7 +142,7 @@ Setup authentication:
 /citeck:citeck-auth
 
 # Or manually:
-python3 scripts/setup_pkce.py --url https://citeck.example.com --client-id citeck-ai-agent
+python3 "<installed-plugin-root>/skills/citeck-auth/scripts/setup_pkce.py" --url https://citeck.example.com --client-id citeck-ai-agent
 ```
 
 The `client_id` defaults to the server hostname if not specified.

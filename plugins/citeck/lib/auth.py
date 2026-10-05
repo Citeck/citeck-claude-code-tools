@@ -394,7 +394,7 @@ def _resolve_credentials(profile, config_dir):
     if creds is None:
         raise AuthError(
             f"No credentials found for profile '{resolved_profile}'. "
-            "Run 'citeck:citeck-auth' to configure."
+            "Run the citeck-auth skill to configure."
         )
     return creds, resolved_profile
 

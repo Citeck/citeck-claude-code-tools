@@ -118,7 +118,7 @@ close+reopen НЕ сбрасывает conversationId). **Switch agent сбра�
 ⚠ ID агентов (`c1b845b7-…`, `95465845-…`, …) меняются между стендами. На свежем стенде —
 переоткрыть через Records API, не доверять снимку:
 ```python
-mcp__citeck__records_query(
+records_query(
   query={"sourceId":"emodel/ai-agent","language":"predicate","query":{}},
   attributes=["id","name","providerType","modelName","temperature","tools[]?str","instruction"])
 ```

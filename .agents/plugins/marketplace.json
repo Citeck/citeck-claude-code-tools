@@ -1,0 +1,12 @@
+{
+  "name": "citeck",
+  "interface": {"displayName": "Citeck"},
+  "plugins": [
+    {
+      "name": "citeck",
+      "source": {"source": "local", "path": "./plugins/citeck"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_USE"},
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -1,20 +1,20 @@
-# Citeck Claude Code Tools
+# Citeck Tools for Claude Code and Codex
 
-Plugin marketplace for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to boost development on the [Citeck](https://www.citeck.ru/) platform.
+Plugin marketplace for local Claude Code and Codex CLI to support development on the [Citeck](https://www.citeck.ru/) platform.
 
 ## What you get
 
 ### Task creation from code changes
 
-Run `/citeck:citeck-changes-to-task` after finishing work on a branch — Claude analyzes the diff, determines the task type (Bug / Story / Task), generates a title in English and a structured description in Russian for QA, and creates an issue in Project Tracker. No need to switch context or fill in forms manually.
+Run `/citeck:citeck-changes-to-task` after finishing work on a branch — The assistant analyzes the diff, determines the task type (Bug / Story / Task), generates a title in English and a structured description in Russian for QA, and creates an issue in Project Tracker. No need to switch context or fill in forms manually.
 
 ### Task creation from description
 
-You don't need code changes at all. Describe what you need in natural language — Claude creates the issue with the right type, priority, components, and tags.
+You don't need code changes at all. Describe what you need in natural language — The assistant creates the issue with the right type, priority, components, and tags.
 
 ### Working on tracker issues
 
-Ask Claude to take a look at any issue by ID (e.g. "look at COREDEV-3703"). Claude will:
+Ask your coding assistant to take a look at any issue by ID (e.g. "look at COREDEV-3703"). The assistant will:
 - Fetch the issue details and all comments
 - Automatically download and analyze screenshots and images from comments — visual context is read without asking
 - Understand the full picture: description, discussion, decisions, and attached screenshots
@@ -22,7 +22,7 @@ Ask Claude to take a look at any issue by ID (e.g. "look at COREDEV-3703"). Clau
 
 ### Direct access to Records API
 
-The plugin exposes raw `records_query` and `records_mutate` tools — the same Records API that powers the platform. This means Claude can:
+The plugin exposes raw `records_query` and `records_mutate` tools — the same Records API that powers the platform. This means The assistant can:
 - **Create test data** — populate the system with records for development and testing
 - **Query any data** — search and inspect records across the platform by predicates, load attributes, paginate
 - **Bulk mutations** — update multiple records at once
@@ -37,7 +37,7 @@ Beyond creation, the plugin provides full issue lifecycle tools:
 
 ### Ask the Citeck documentation
 
-Run `/citeck:citeck-ask-docs <question>` to query the Citeck ECOS documentation via RAG. Claude searches `citeck-docs` semantically and synthesizes a grounded answer with citations — no need to open the docs site manually. Works for platform concepts, configuration, and APIs.
+Run `/citeck:citeck-ask-docs <question>` to query the Citeck ECOS documentation via RAG. The assistant searches `citeck-docs` semantically and synthesizes a grounded answer with citations — no need to open the docs site manually. Works for platform concepts, configuration, and APIs.
 
 ## Installation
 
@@ -49,6 +49,52 @@ Install uv if you don't have it:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+### Codex CLI
+
+Локальная установка проверена в Codex CLI `0.160.0`:
+
+```bash
+codex plugin marketplace add /absolute/path/to/citeck-claude-code-tools
+codex plugin add citeck@citeck
+codex plugin list --json
+```
+
+После изменения локального пакета обновите каталог и повторите установку:
+
+```bash
+codex plugin add citeck@citeck
+```
+
+Откройте новую сессию. Codex загружает установленную копию плагина; изменения исходников
+не изменяют уже запущенный MCP-процесс. Каталог Git будет содержать адаптацию после публикации
+соответствующего commit; текущая проверка относится к локальной установке.
+
+В Codex выберите `$citeck:citeck-auth`, `$citeck:citeck-ask-docs`,
+`$citeck:citeck-changes-to-task`, `$citeck:citeck-changes-to-task-md` или
+`$citeck:citeck-test-feature` в списке навыков. Можно описать задачу обычным текстом.
+В Claude Code используйте `/citeck:<skill-name>`. Оба клиента читают общие файлы навыков.
+
+Первый запуск `uv` устанавливает зависимости и требует доступа к Python-репозиторию.
+В конфигурации Codex задано `startup_timeout_sec = 180` и `tool_timeout_sec = 300`:
+повтор PKCE после отклонения scope может ждать два раза по 120 секунд, затем обменять код
+на токены. При изменении параметра `reauthenticate.timeout` увеличьте общий предел клиента.
+Авторизацию выполняет Citeck через `~/.citeck/`; `codex mcp login` её не заменяет.
+Перед запросами проверяйте профили и адреса через `list_profiles`; для отдельных операций
+передавайте `profile` явно. Изменяйте общие профили и настройки авторизации последовательно:
+текущее хранилище `~/.citeck/` не блокирует одновременную запись из двух клиентов. Разрешения и песочница каждого клиента действуют независимо.
+
+Приёмка UI через Playwright по умолчанию выполняется в видимом окне, чтобы пользователь
+мог наблюдать действия. Скрытый режим должен быть явно выбран или согласован для CI.
+Проверка UI требует отдельного доступного браузерного инструмента с навигацией, вводом,
+загрузкой файлов, снимками экрана и наблюдением за ошибками консоли и сети. Плагин Citeck
+его не устанавливает. Если делегирование запрещено или недоступно, тестовые задания
+выполняются последовательно с теми же критериями результата.
+
+Поддерживаемые цели этого выпуска — локальные CLI. Проверки CLI не подтверждают работу
+настольного приложения, IDE, удалённого выполнения или Codex Cloud. Подробные результаты
+и невыполненные проверки записаны в
+[плане адаптации](docs/plans/2026-10-05-codex-plugin-adaptation.md).
 
 ### Option A: from the shell (recommended)
 

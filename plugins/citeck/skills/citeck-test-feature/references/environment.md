@@ -10,8 +10,8 @@ DURABLE-ядро: выбор стенда, MCP-профили, auth, **safety-п
 
 | Переменная | Что это | Откуда берётся |
 |---|---|---|
-| `<profile>` | MCP-профиль Citeck | `mcp__citeck__list_profiles` → выбор пользователя |
-| `<base_url>` | базовый URL gateway стенда | `mcp__citeck__test_connection` (поле `url`) |
+| `<profile>` | MCP-профиль Citeck | `list_profiles` → выбор пользователя |
+| `<base_url>` | базовый URL gateway стенда | `test_connection` (поле `url`) |
 | `<auth>` | способ аутентификации | BASIC (`-u user:pass`) для локального / OIDC-cookie для удалённого |
 | `<classification>` | класс стенда | стенд-политика (см. §4), НЕ угадывается по hostname |
 
@@ -27,7 +27,7 @@ DURABLE-ядро: выбор стенда, MCP-профили, auth, **safety-п
 | Удалённый dev/QA/staging | `dev`, `qa`, `staging` | OIDC (PKCE) — сессия через `reauthenticate` | Для curl нужен валидный токен/cookie; BASIC обычно выключен |
 | Прод | `production` | OIDC | ⚠ деструктив запрещён политикой (§4) |
 
-При session-expired на OIDC-профиле — вызвать `mcp__citeck__reauthenticate` (откроет браузер,
+При session-expired на OIDC-профиле — вызвать `reauthenticate` (откроет браузер,
 блокирует до логина), затем повторить операцию. НЕ гонять `citeck:citeck-auth` для смены сессии.
 
 ## 3. Smoke перед стартом (≤2 мин)
@@ -40,7 +40,7 @@ BASIC_AUTH=admin:admin     # только для BASIC local
 AUTH_ARGS=(-u "$BASIC_AUTH")  # для OIDC использовать bearer/cookie array
 
 # 1. Records API через MCP живой
-mcp__citeck__test_connection            # url должен == <base_url>
+test_connection            # url должен == <base_url>
 
 # 2. Целевой сервис отвечает (health-check эндпоинт фичи; ниже — generic gateway ping)
 curl -sS "${AUTH_ARGS[@]}" "$BASE/gateway/<service>/<health-or-availability-endpoint>" -w '|HTTP=%{http_code}'
@@ -139,23 +139,18 @@ stands:
 | local | local | http://localhost | true | `test-*` |
 | _(добавить удалённые стенды)_ | | | | |
 
-## 5. Allowlist Claude Code (чтобы не упираться в prompt'ы)
+## 5. Разрешения клиента
 
-Полезно (но не обязательно) разрешить без подтверждения в `.claude/settings.local.json`:
-- `mcp__plugin_playwright_playwright__*`
-- Citeck MCP read: `records_query`, `test_connection`, `search_issues`, `query_comments`,
-  `list_profiles`
-- `Bash(curl -* <base_url>/*)`, `Bash(python3 *async-http.py*)`, `Bash(jq *)`, `Bash(python3 -c*PIL*)`
-- (локально) `Bash(docker ps:*)`, `Bash(docker logs *<namespace>*:*)`
-
-С подтверждением **намеренно** остаются: `records_mutate`, правки `application.yml`/исходников,
-`docker restart`, `git push`/`gh pr create`. Если allowlist не настроен — после первого прогона
-запустить `/fewer-permission-prompts`, он соберёт точный список из транскрипта.
+Claude Code использует разрешения в `.claude/settings.local.json`; Codex — правила песочницы
+и подтверждений текущей сессии. Разрешения одного клиента не переносятся в другой.
+Не расширять их автоматически. При необходимости запросить разрешение на конкретное действие
+средствами текущего клиента. Существующая авторизация пользователя и политика стенда определяют,
+какие операции допустимы.
 
 ## 6. Создание тестового workspace (пример деструктива — только если политика разрешает)
 
 ```python
-mcp__citeck__records_mutate(records=[{
+records_mutate(records=[{
   "id": "emodel/workspace@",
   "attributes": {
     "id?str": "<test-workspace-id>",

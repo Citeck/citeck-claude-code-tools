@@ -108,3 +108,12 @@ A smoke/impact report additionally states `**Scope limitation:**` — what the r
 Checking a full-only criterion under a limited scope is itself a validation error. Unchecked boxes
 are only inspected inside the `## Final Gate` section, so defect and follow-up checklists elsewhere
 in the report are free-form.
+
+## Follow-up branches
+
+For an issue that branches from an already tested feature, compare the issue's own commit range
+(`git log <parent-feature>..<issue-branch>` or its fix commits), rather than the entire parent
+feature against develop. Inspect relevant `src/main` changes and separate merge noise.
+For impact runs, earlier results inform case selection; they never constitute a current PASS.
+Full runs execute every required manifest case on the current deployed SHA. A targeted follow-up
+usually runs its default configuration cluster and parent regression cases for affected classes.

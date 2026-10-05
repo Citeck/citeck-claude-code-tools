@@ -400,3 +400,48 @@ class TestExceptionHierarchy(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConfirmedServer(RecordsApiTestBase):
+    def test_changed_server_stops_before_authentication(self):
+        with patch('lib.auth.get_auth_header') as authenticate, \
+             patch('lib.records_api.urllib.request.urlopen') as send:
+            with self.assertRaisesRegex(records_api.RecordsApiError, 'Profile server changed'):
+                records_api.records_mutate([], profile='default', config_dir=self.tmpdir,
+                                           expected_server='https://confirmed.example')
+            authenticate.assert_not_called()
+            send.assert_not_called()
+
+    def test_server_changed_during_authentication_stops_write(self):
+        def authenticate(*args):
+            config.save_credentials('default', 'http://changed.invalid', username='fixture',
+                                    password='fixture', auth_method='basic', config_dir=self.tmpdir)
+            return 'Basic fixture'
+        with patch('lib.auth.get_auth_header', side_effect=authenticate), \
+             patch('lib.records_api.urllib.request.urlopen') as send:
+            with self.assertRaisesRegex(records_api.RecordsApiError, 'changed during authentication'):
+                records_api.records_mutate([], profile='default', config_dir=self.tmpdir,
+                                           expected_server='http://localhost')
+            send.assert_not_called()
+
+    def test_confirmed_url_is_used_after_last_profile_check(self):
+        def send(request, **kwargs):
+            # A later config change cannot redirect the already prepared mutation.
+            config.save_credentials('default', 'http://changed.invalid', username='fixture',
+                                    password='fixture', auth_method='basic', config_dir=self.tmpdir)
+            self.assertEqual(request.full_url, 'http://localhost/gateway/api/records/mutate')
+            return self._mock_urlopen({'records': []})
+        with patch('lib.auth.get_auth_header', return_value='Basic fixture'), \
+             patch('lib.records_api.urllib.request.urlopen', side_effect=send):
+            self.assertEqual(records_api.records_mutate([], profile='default', config_dir=self.tmpdir,
+                             expected_server='http://localhost/'), {'records': []})
+
+    def test_deleted_profile_does_not_send(self):
+        data = config._read_config(self.tmpdir)
+        del data['profiles']['default']
+        config._write_config(data, self.tmpdir)
+        with patch('lib.records_api.urllib.request.urlopen') as send:
+            with self.assertRaises(records_api.RecordsApiError):
+                records_api.records_mutate([], profile='default', config_dir=self.tmpdir,
+                                           expected_server='http://localhost')
+            send.assert_not_called()

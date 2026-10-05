@@ -595,10 +595,10 @@ class TestSkillStaticContracts(unittest.TestCase):
         self.assertNotRegex(text, r"git\s+(checkout|restore)\s+--")
         self.assertNotIn("$AUTH ", text)
 
-    def test_skill_allows_profile_switch_tools(self):
+    def test_skill_describes_profile_switch_tools(self):
         skill = (SKILL_DIR / "SKILL.md").read_text()
-        self.assertIn("mcp__citeck__set_active_profile", skill)
-        self.assertIn("mcp__citeck__set_records_profile", skill)
+        self.assertIn("set_active_profile", skill)
+        self.assertIn("set_records_profile", skill)
         self.assertIn("references/coverage-model.md", skill)
 
     def test_planning_templates_keep_placeholders_fail_closed(self):
@@ -639,11 +639,6 @@ class TestSkillStaticContracts(unittest.TestCase):
                     f"step {number} reads {name}, table says {sorted(table[name])}",
                 )
 
-    def test_tools_prescribed_by_runner_templates_are_allowlisted(self):
-        allowlist = (SKILL_DIR / "references" / "environment.md").read_text()
-        runner = (SKILL_DIR / "templates" / "subagent-tier-a.md").read_text()
-        if "`jq`" in runner:
-            self.assertIn("Bash(jq *)", allowlist)
 
 
 if __name__ == "__main__":

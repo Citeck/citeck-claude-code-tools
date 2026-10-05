@@ -42,12 +42,13 @@ def _get_base_url(profile=None, config_dir=None):
         resolved = profile or config.get_active_profile(config_dir)
         raise RecordsApiError(
             f"No credentials found for profile '{resolved}'. "
-            "Run 'citeck:citeck-auth' to configure."
+            "Run the citeck-auth skill to configure."
         )
     return creds["url"].rstrip("/")
 
 
-def request(path, body, profile=None, config_dir=None, timeout=DEFAULT_TIMEOUT):
+def request(path, body, profile=None, config_dir=None, timeout=DEFAULT_TIMEOUT,
+            expected_server=None):
     """Send a POST request to a Records API endpoint.
 
     Returns parsed JSON response.
@@ -55,7 +56,11 @@ def request(path, body, profile=None, config_dir=None, timeout=DEFAULT_TIMEOUT):
     """
     try:
         base_url = _get_base_url(profile, config_dir)
+        if expected_server is not None and base_url != expected_server.rstrip("/"):
+            raise RecordsApiError("Profile server changed. Preview the issue again and confirm the new server.")
         auth_header = auth.get_auth_header(profile, config_dir)
+        if expected_server is not None and _get_base_url(profile, config_dir) != base_url:
+            raise RecordsApiError("Profile server changed during authentication. Preview and confirm again.")
     except auth.AuthError as e:
         raise RecordsApiError(str(e)) from e
     except config.ConfigError as e:
@@ -81,7 +86,7 @@ def request(path, body, profile=None, config_dir=None, timeout=DEFAULT_TIMEOUT):
         if e.code in (401, 403):
             raise AuthenticationError(
                 f"Authentication failed: HTTP {e.code} {e.reason}. "
-                "Check credentials with 'citeck:citeck-auth'.",
+                "Check credentials with the citeck-auth skill.",
                 status_code=e.code,
                 response_body=response_body,
             ) from e
@@ -167,7 +172,8 @@ def records_load(record_ids, attributes=None, version=1,
     return request(QUERY_PATH, body, profile, config_dir, timeout)
 
 
-def records_mutate(records, version=1, profile=None, config_dir=None, timeout=DEFAULT_TIMEOUT):
+def records_mutate(records, version=1, profile=None, config_dir=None, timeout=DEFAULT_TIMEOUT,
+                   expected_server=None):
     """Mutate (create or update) records.
 
     Args:
@@ -176,11 +182,14 @@ def records_mutate(records, version=1, profile=None, config_dir=None, timeout=DE
         profile: Credentials profile name (optional)
         config_dir: Config directory override (optional)
         timeout: Request timeout in seconds
+        expected_server: Confirmed server URL; reject a changed profile before sending.
 
     Returns:
         Parsed JSON response dict
     """
     body = {"records": records, "version": version}
+    if expected_server is not None:
+        return request(MUTATE_PATH, body, profile, config_dir, timeout,
+                       expected_server=expected_server)
     return request(MUTATE_PATH, body, profile, config_dir, timeout)
-
 

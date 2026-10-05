@@ -1,4 +1,4 @@
-"""Citeck ECOS MCP server for Claude Code."""
+"""Citeck ECOS MCP server for Claude Code and Codex."""
 
 import mimetypes
 import os
@@ -85,15 +85,15 @@ mcp = FastMCP(
         "2. Use query_comments to fetch comments — they contain important context, "
         "discussion, and decisions. Images are auto-downloaded to local files.\n"
         "3. If comments contain images (non-empty 'images' list with 'path' values), "
-        "AUTOMATICALLY read each downloaded file with the Read tool to understand "
+        "AUTOMATICALLY read each downloaded file with an available file or image-viewing tool to understand "
         "screenshots and visual context. Do this without asking the user — images "
         "in bug reports are essential for understanding the issue.\n\n"
         "Multiple environments are supported via profiles. Use list_profiles to see "
         "configured environments and set_active_profile to switch between them — "
-        "do NOT ask the user to invoke /citeck:citeck-auth just to switch.\n\n"
+        "do NOT ask the user to invoke citeck-auth just to switch.\n\n"
         "If a tool fails with a session-expired error, call the reauthenticate tool "
         "(it opens the user's browser for login and blocks until complete), then "
-        "retry the original operation — do NOT send the user to /citeck:citeck-auth.\n\n"
+        "retry the original operation — do NOT send the user to citeck-auth.\n\n"
         "Specialized profiles can route specific tool groups to different environments:\n"
         "- ept_profile (set_ept_profile): task-tracker tools (search_issues, create_issue, "
         "update_issue, list_projects, query_sprints/components/tags/releases, query_comments, "
@@ -132,7 +132,7 @@ def test_connection() -> dict:
             return {
                 "ok": False,
                 "error": f"No credentials found for profile '{profile}'. "
-                         "Run 'citeck:citeck-auth' to configure.",
+                         "Run the citeck-auth skill to configure.",
             }
 
         result = validate_connection(profile=profile, config_dir=config_dir)
@@ -179,7 +179,7 @@ def reauthenticate(profile: str | None = None, timeout: int = 120) -> dict:
             return {
                 "ok": False,
                 "error": f"No credentials found for profile '{resolved}'. "
-                         "Run 'citeck:citeck-auth' to configure.",
+                         "Run the citeck-auth skill to configure.",
             }
 
         if creds.get("auth_method") != "oidc-pkce":
@@ -554,7 +554,7 @@ def set_docs_profile(profile: str) -> dict:
     fall back to the active profile.
 
     Args:
-        profile: Profile name (must already be configured via /citeck:citeck-auth),
+        profile: Profile name (must already be configured via citeck-auth),
                  or empty string to clear the setting.
     """
     config_dir = _get_config_dir()
@@ -583,7 +583,7 @@ def set_ept_profile(profile: str) -> dict:
     to the active profile.
 
     Args:
-        profile: Profile name (must already be configured via /citeck:citeck-auth),
+        profile: Profile name (must already be configured via citeck-auth),
                  or empty string to clear the setting.
     """
     config_dir = _get_config_dir()
@@ -610,7 +610,7 @@ def set_records_profile(profile: str) -> dict:
     profile.
 
     Args:
-        profile: Profile name (must already be configured via /citeck:citeck-auth),
+        profile: Profile name (must already be configured via citeck-auth),
                  or empty string to clear the setting.
     """
     config_dir = _get_config_dir()
@@ -678,7 +678,7 @@ def list_profiles() -> dict:
 def set_active_profile(profile: str) -> dict:
     """Switch the active Citeck profile (used by all records and issue tools).
 
-    The profile must already be configured via /citeck:citeck-auth — this only
+    The profile must already be configured via citeck-auth — this only
     switches between existing profiles, it cannot create new ones. Call
     list_profiles first to see what's configured.
 
@@ -1159,6 +1159,7 @@ def create_issue(
     links_clone: list[str] | None = None,
     links_problem: list[str] | None = None,
     profile: str | None = None,
+    expected_server: str | None = None,
 ) -> dict:
     """Create an issue in Citeck Project Tracker. This actually creates the issue.
 
@@ -1187,6 +1188,7 @@ def create_issue(
         links_clone: Issue links of type "is cloned from" — list of issue references.
         links_problem: Issue links of type "is caused by" / problem — list of issue references.
         profile: Override the profile for this call only. Usually leave empty.
+        expected_server: Confirmed preview's server URL. Reject a changed target before writing.
 
     Reporter is auto-set to the current user.
     """
@@ -1215,12 +1217,17 @@ def create_issue(
             config_dir=config_dir,
         )
 
-        # Actually create
+        if expected_server is not None and server_url != expected_server.rstrip("/"):
+            return {"ok": False, "error": "Profile server changed. Preview the issue again and confirm the new server."}
+
+        # Preserve the confirmed destination across the final HTTP preparation.
+        target_guard = {"expected_server": expected_server} if expected_server is not None else {}
         result = lib_records_mutate(
             records=[record],
             version=1,
             profile=resolved,
             config_dir=config_dir,
+            **target_guard,
         )
 
         result_records = result.get("records", [])
@@ -2088,7 +2095,7 @@ def query_comments(
     Comments are sorted newest first. The 'text' field is plain text
     (HTML stripped); 'textHtml' preserves the original HTML.
     Images from comments are automatically downloaded to ~/.citeck/downloads/
-    and returned as 'images' list with local file paths. Use the Read tool
+    and returned as 'images' list with local file paths. Use an available file or image-viewing tool
     to view the downloaded images.
 
     Args:
@@ -2461,7 +2468,7 @@ def download_attachment(
 
     Routes through ept_profile if set, otherwise the active profile.
 
-    Saves the file to ~/.citeck/downloads/. Use the Read tool with the returned
+    Saves the file to ~/.citeck/downloads/. Use an available file or image-viewing tool with the returned
     path to view the file contents. Supports images, PDFs, and other binary files.
 
     Args:

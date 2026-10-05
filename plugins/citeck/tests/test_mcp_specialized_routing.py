@@ -47,6 +47,45 @@ def config_dir():
 
 # --- records_query routing ---
 
+@pytest.mark.parametrize("assignee", ["other.user", "configured.user"])
+async def test_preview_and_create_keep_explicit_profile_and_issue_fields(client, config_dir, assignee):
+    params = {"type": "task", "summary": "Adapt plugin", "project": "PROJECT",
+              "profile": "prod", "assignee": assignee, "fix_in_version": ["release-id"]}
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
+         patch("servers.citeck_mcp._resolve_project_info", return_value=("emodel/project@p", "workspace")), \
+         patch("servers.citeck_mcp._resolve_ref_labels", return_value={}), \
+         patch("servers.citeck_mcp.get_username", return_value="reporter"), \
+         patch("servers.citeck_mcp.lib_records_mutate", return_value={
+             "records": [{"id": "emodel/ept-issue@id", "attributes": {}}]}) as mutate:
+        preview = (await client.call_tool("preview_issue", params)).data
+        assert preview["ok"] is True
+        assert preview["profile"] == "prod"
+        mutate.assert_not_called()
+        # Another session changes both defaults after the preview.
+        config.set_ept_profile("local", config_dir)
+        config.set_active_profile("local", config_dir)
+        created = (await client.call_tool("create_issue", {**params, "expected_server": preview["server"]})).data
+        assert created["ok"] is True
+        assert mutate.call_args.kwargs["profile"] == "prod"
+        assert mutate.call_args.kwargs["expected_server"] == preview["server"]
+        record = mutate.call_args.kwargs["records"][0]
+        assert record == preview["record"]
+        assert record["attributes"]["implementer?str"] == f"emodel/person@{assignee}"
+        assert record["attributes"]["fixInVersion?assoc"] == ["emodel/ecos-release-type@release-id"]
+
+
+async def test_deleted_explicit_profile_never_falls_back_on_create(client, config_dir):
+    data = config._read_config(config_dir)
+    del data["profiles"]["prod"]
+    config._write_config(data, config_dir)
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
+         patch("servers.citeck_mcp.lib_records_mutate") as mutate:
+        result = (await client.call_tool("create_issue", {
+            "type": "task", "summary": "Adapt plugin", "project": "PROJECT", "profile": "prod"
+        })).data
+        assert result["ok"] is False
+        mutate.assert_not_called()
+
 async def test_records_query_uses_records_profile(client: Client, config_dir: str):
     config.set_records_profile("prod", config_dir)
     with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
@@ -166,3 +205,17 @@ async def test_records_query_errors_when_records_profile_missing(client: Client,
         result = await client.call_tool("records_query", {"source_id": "emodel/ept-issue"})
     assert result.data["ok"] is False
     assert "records_profile" in result.data["error"]
+
+
+async def test_changed_confirmed_server_rejects_issue_creation(client, config_dir):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
+         patch("servers.citeck_mcp._resolve_project_info", return_value=("emodel/project@p", "workspace")), \
+         patch("servers.citeck_mcp.get_username", return_value="reporter"), \
+         patch("servers.citeck_mcp.lib_records_mutate") as mutate:
+        result = (await client.call_tool("create_issue", {
+            "type": "task", "summary": "Adapt plugin", "project": "PROJECT", "profile": "prod",
+            "expected_server": "https://previous.example.com"
+        })).data
+        assert result["ok"] is False
+        assert "server changed" in result["error"]
+        mutate.assert_not_called()

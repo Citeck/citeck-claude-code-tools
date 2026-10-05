@@ -1,8 +1,18 @@
 ---
 name: citeck-ask-docs
 description: "Ask a question about the Citeck ECOS platform — searches citeck-docs via RAG and synthesizes an answer with citations. Use when the user asks how Citeck works, how to configure something, or about platform concepts."
-allowed-tools: mcp__citeck__search_docs, mcp__citeck__set_docs_profile, AskUserQuestion
 ---
+
+## Client tools and paths
+
+Use tools available in the current session by purpose; MCP names below are logical
+Citeck tool names, not fixed client prefixes. Client permissions and sandbox rules apply.
+Resolve `SKILL_DIR` to the absolute directory containing this loaded `SKILL.md`.
+Resolve references from that directory and quote script paths, including paths with spaces.
+These instructions do not create an isolated context automatically.
+Claude Code: `/citeck:citeck-ask-docs`; Codex: select `$citeck:citeck-ask-docs`
+from the skill picker, or request the skill by name in natural language.
+
 
 # Ask Citeck Documentation
 
@@ -10,7 +20,11 @@ Answer questions about the Citeck ECOS platform using semantic search over the c
 
 ## Prerequisites
 
-Run `/citeck:citeck-auth` first so at least one profile has credentials. The docs RAG service is reached via the profile set as `docs_profile` in `~/.citeck/credentials.json` (falls back to the active profile).
+Use the `citeck-auth` skill first so at least one profile has credentials. The docs RAG service is reached via the profile set as `docs_profile` in `~/.citeck/credentials.json` (falls back to the active profile).
+
+Search in Russian. If no relevant snippets are returned, say that the search was empty.
+If Citeck MCP is unavailable, disclose it and use local `ecos-docs` sources when available;
+do not claim a RAG search occurred.
 
 ## Flow
 
@@ -22,10 +36,14 @@ If the user supplied a question with the skill invocation, use it. Otherwise ask
 
 ### Step 2: Search
 
-Call `mcp__citeck__search_docs`:
+Call `search_docs`:
+
+When the request specifies a profile, verify its URL with `list_profiles` and pass
+that explicit `profile` to the search; do not change the shared docs profile for a
+one-off query. Otherwise use the configured `docs_profile`.
 
 ```
-mcp__citeck__search_docs(
+search_docs(
   question: "<user question>",
   top_k: 5
 )
@@ -33,12 +51,13 @@ mcp__citeck__search_docs(
 
 ### Step 3: Handle edge cases
 
-- **Connection/404 error against the resolved server**, or the error message suggests no RAG is deployed on that profile — the active profile is likely a local Citeck without a RAG index. Ask the user via `AskUserQuestion` which configured profile hosts citeck-docs, then call:
+- **Connection/404 error against the resolved server**, or the error message suggests no RAG is deployed on that profile — the active profile is likely a local Citeck without a RAG index. Ask the user using the available user-question mechanism which configured profile hosts citeck-docs, then call:
   ```
-  mcp__citeck__set_docs_profile(profile: "<chosen>")
+  set_docs_profile(profile: "<chosen>")
   ```
   and retry the search. If the user doesn't know, explain that `docs_profile` must point to a Citeck server where the `citeck-docs` RAG repository is indexed.
-- **Authentication error** — stop and instruct the user to run `/citeck:citeck-auth`.
+- **Authentication error** — stop and instruct the user to use the `citeck-auth` skill
+  through the current client's skill invocation mechanism.
 - **Empty results (`count: 0`)** — tell the user the search returned nothing and show the `question` verbatim so they can reformulate.
 - **Low scores** (all below ~0.5) — mention that matches are weak and the answer may be incomplete.
 

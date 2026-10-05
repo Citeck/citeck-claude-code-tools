@@ -6,7 +6,10 @@
 Прогнать Tier B и UI-части A+B ID набора `<AREA>` через Playwright. Reconcile evidence под
 исходным ID; не создавать отдельный PASS для UI-дубля.
 
-**Метод:** Playwright MCP (`mcp__plugin_playwright_playwright__browser_navigate`/`snapshot`/`click`/
+**Окно браузера:** видимое по умолчанию; соблюдать правила `references/playwright-tips.md`.
+Скрытый режим и его согласование указать в отчёте.
+
+**Метод:** Playwright MCP (`browser_navigate`/`snapshot`/`click`/
 `type`/`file_upload`/`console_messages`/`network_requests`/…).
 **Стенд:** `<BASE_URL>`. **Run-id:** `<RUN_ID>`, песочница `<TEST_WORKSPACE>`.
 

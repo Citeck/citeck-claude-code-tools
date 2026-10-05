@@ -8,5 +8,11 @@
   "repository": "https://github.com/Citeck/citeck-claude-code-tools",
   "license": "GPL-3.0-only",
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "./.mcp.codex.json",
+  "interface": {
+    "displayName": "Citeck",
+    "shortDescription": "Citeck ECOS tools and workflows",
+    "developerName": "Citeck",
+    "category": "Developer Tools"
+  }
 }

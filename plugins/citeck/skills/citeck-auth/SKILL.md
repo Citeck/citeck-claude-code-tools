@@ -1,8 +1,18 @@
 ---
 name: citeck-auth
 description: "Configure Citeck ECOS connection - set URL, credentials, and test connectivity. Use when the user needs to set up or manage Citeck authentication."
-allowed-tools: Bash(python3 */skills/citeck-auth/scripts/setup.py *, python3 */skills/citeck-auth/scripts/setup_pkce.py *, python3 */skills/citeck-auth/scripts/test_connection.py *, python3 */skills/citeck-auth/scripts/switch_profile.py *), AskUserQuestion, mcp__citeck__set_docs_profile
 ---
+
+## Client tools and paths
+
+Use tools available in the current session by purpose; MCP names below are logical
+Citeck tool names, not fixed client prefixes. Client permissions and sandbox rules apply.
+Resolve `SKILL_DIR` to the absolute directory containing this loaded `SKILL.md`.
+Resolve references from that directory and quote script paths, including paths with spaces.
+These instructions do not create an isolated context automatically.
+Claude Code: `/citeck:citeck-auth`; Codex: select `$citeck:citeck-auth`
+from the skill picker, or request the skill by name in natural language.
+
 
 # Citeck ECOS Authentication Setup
 
@@ -27,7 +37,7 @@ This means Keycloak can live on a different host (e.g., app at `citeck.example.c
 Authenticate via browser without storing passwords. The script opens a browser for Keycloak login and receives tokens automatically:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/setup_pkce.py --profile <name> --url <url> [--client-id <id>] [--timeout 120]
+python3 "${SKILL_DIR}/scripts/setup_pkce.py" --profile <name> --url <url> [--client-id <id>] [--timeout 120]
 ```
 
 Parameters:
@@ -46,12 +56,12 @@ The script will:
 For environments without browser access, use password-based setup:
 
 ```bash
-CITECK_PASSWORD='<pass>' python3 ${CLAUDE_SKILL_DIR}/scripts/setup.py --profile <name> --url <url> --username <user> [--auth-method oidc|basic]
+CITECK_PASSWORD='<pass>' python3 "${SKILL_DIR}/scripts/setup.py" --profile <name> --url <url> --username <user> [--auth-method oidc|basic]
 ```
 
 For OIDC auth with client credentials:
 ```bash
-CITECK_PASSWORD='<pass>' CITECK_CLIENT_ID='<id>' CITECK_CLIENT_SECRET='<secret>' python3 ${CLAUDE_SKILL_DIR}/scripts/setup.py --profile <name> --url <url> --username <user>
+CITECK_PASSWORD='<pass>' CITECK_CLIENT_ID='<id>' CITECK_CLIENT_SECRET='<secret>' python3 "${SKILL_DIR}/scripts/setup.py" --profile <name> --url <url> --username <user>
 ```
 
 Parameters:
@@ -69,8 +79,17 @@ Environment variables (preferred over CLI args to avoid process-list exposure):
 
 Validate saved credentials by testing connectivity:
 
+Prefer the MCP tools when available: call `list_profiles`, verify that the selected
+profile is active and its URL matches the requested target, then call `test_connection`.
+This tool has no `profile` argument: verify the returned profile and URL too. Do not
+switch a shared active profile just to perform a check. For a different profile, or
+when MCP is unavailable, use the script below with an explicit profile. Shell HTTP
+and local callback ports may require client approval; if the sandbox blocks them,
+request that approval when supported or report the limitation. Never silently widen
+permissions or treat a blocked request as invalid credentials.
+
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/test_connection.py [--profile <name>]
+python3 "${SKILL_DIR}/scripts/test_connection.py" [--profile <name>]
 ```
 
 Reports whether the connection succeeded, which auth method was used, and any errors.
@@ -80,19 +99,19 @@ Reports whether the connection succeeded, which auth method was used, and any er
 Switch between configured profiles:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/switch_profile.py --profile <name>
+python3 "${SKILL_DIR}/scripts/switch_profile.py" --profile <name>
 ```
 
 Lists available profiles when called with `--list`.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/switch_profile.py --list
+python3 "${SKILL_DIR}/scripts/switch_profile.py" --list
 ```
 
 Show non-sensitive settings (url, auth_method, client_id) of a specific profile:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/switch_profile.py --detail <name>
+python3 "${SKILL_DIR}/scripts/switch_profile.py" --detail <name>
 ```
 
 ## Setup Flow
@@ -113,7 +132,7 @@ Run `switch_profile.py --list` to check if profiles already exist.
    - **Set up a new profile** — go to Step 2b
 4. **Re-authenticate PKCE profile:** run `setup_pkce.py` with url and client_id from the existing profile — do NOT ask the user for URL or auth method again
 5. **Re-authenticate password profile:** ask only for the password (it may have changed), run `setup.py` with url and username from the existing profile
-6. Run `test_connection.py` to verify
+6. Verify the connection using the MCP or script procedure in “Test Connection” above
 7. Report the result
 
 ### Step 2b: No profiles exist (first-time setup)
@@ -126,35 +145,35 @@ Run `switch_profile.py --list` to check if profiles already exist.
 3. Ask for profile name (default: "default")
 4. **If PKCE:**
    - Optionally ask for client_id (default: `citeck-ai-agent`)
-   - Run `setup_pkce.py` — it discovers endpoints and prints a URL, show it to the user via AskUserQuestion
+   - Run `setup_pkce.py` — it discovers endpoints and prints a URL, show it to the user using the available user-question mechanism
    - The user logs in via browser, tokens are received automatically
 5. **If Password grant or Basic:**
    - Ask for username and password
    - If OIDC: optionally ask for client_id and client_secret
    - Run `setup.py` passing secrets via environment variables
-6. Run `test_connection.py` to verify the connection
+6. Verify the connection using the MCP or script procedure in “Test Connection” above
 7. Report the result to the user
-8. **Optional: mark this profile as the docs source.** Ask via AskUserQuestion:
-   > **Use this profile as the citeck-docs source for `/citeck:citeck-ask-docs`?**
+8. **Optional: mark this profile as the docs source.** Ask using the available user-question mechanism:
+   > **Use this profile as the citeck-docs source for the `citeck-ask-docs` skill?**
    > Options: "Yes", "No"
 
-   Only suggest "Yes" if this profile plausibly hosts the citeck-docs RAG index (typically a production or shared server, not an empty local instance). If confirmed, call `mcp__citeck__set_docs_profile(profile: "<name>")`.
+   Only suggest "Yes" if this profile plausibly hosts the citeck-docs RAG index (typically a production or shared server, not an empty local instance). If confirmed, call `set_docs_profile(profile: "<name>")`.
 
-9. **Optional: mark this profile as the task-tracker source.** Ask via AskUserQuestion:
+9. **Optional: mark this profile as the task-tracker source.** Ask using the available user-question mechanism:
    > **Use this profile for task-tracker tools (search_issues, create_issue, query_comments, etc.)?**
    > Options: "Yes", "No"
 
-   Suggest "Yes" when the user typically works with the tracker on this environment but may run records queries elsewhere (e.g. tracker on production, records on local). If confirmed, call `mcp__citeck__set_ept_profile(profile: "<name>")`.
+   Suggest "Yes" when the user typically works with the tracker on this environment but may run records queries elsewhere (e.g. tracker on production, records on local). If confirmed, call `set_ept_profile(profile: "<name>")`.
 
-10. **Optional: mark this profile for plain records queries.** Ask via AskUserQuestion:
+10. **Optional: mark this profile for plain records queries.** Ask using the available user-question mechanism:
     > **Use this profile for plain `records_query` / `records_mutate`?**
     > Options: "Yes", "No"
 
-    Suggest "Yes" when the user typically runs records queries on this environment but uses the tracker elsewhere. If confirmed, call `mcp__citeck__set_records_profile(profile: "<name>")`.
+    Suggest "Yes" when the user typically runs records queries on this environment but uses the tracker elsewhere. If confirmed, call `set_records_profile(profile: "<name>")`.
 
 ## Re-authentication
 
-When a PKCE session expires (both access and refresh tokens), prefer the MCP tool `mcp__citeck__reauthenticate` — it opens the browser and refreshes tokens for an existing profile without re-running this skill. This skill is for first-time setup, changing URLs/credentials, and managing profiles. Use it for re-authentication only when the MCP server is unavailable or the profile is password-based.
+When a PKCE session expires (both access and refresh tokens), prefer the MCP tool `reauthenticate` — it opens the browser and refreshes tokens for an existing profile without re-running this skill. This skill is for first-time setup, changing URLs/credentials, and managing profiles. Use it for re-authentication only when the MCP server is unavailable or the profile is password-based.
 
 ## Credentials Storage
 

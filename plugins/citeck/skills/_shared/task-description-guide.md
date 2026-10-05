@@ -29,7 +29,7 @@ Analyze the changes and determine the task type:
 - **Story** (История) -- new files, components, API endpoints, significant new functionality or user-facing capabilities
 - **Task** (Задача) -- refactoring, dependency updates, configuration changes, tech debt, migrations, build/CI changes, code cleanup
 
-Ask the user to confirm or correct the type using `AskUserQuestion`:
+Ask the user to confirm or correct the type using the available user-question mechanism:
 - Set the determined type as the first option with "(Recommended)" suffix
 - List the other two types as alternatives
 

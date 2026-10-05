@@ -1,9 +1,9 @@
 # Reference: Records API Patterns
 
-DURABLE-ядро: паттерны `mcp__citeck__records_query` / `records_mutate` для setup и verify.
+DURABLE-ядро: паттерны `records_query` / `records_mutate` для setup и verify.
 Платформо-агностично. Конкретные типы/атрибуты тестируемой фичи — в `examples/` или `cases/`.
 
-⚠ **Перед любым `records_mutate`** — `mcp__citeck__test_connection` и сверка `url == <base_url>`
+⚠ **Перед любым `records_mutate`** — `test_connection` и сверка `url == <base_url>`
 выбранного стенда + проверка safety-политики (`environment.md` §4). Мутации только если стенд
 классифицирован non-prod с `destructive_allowed: true`.
 
