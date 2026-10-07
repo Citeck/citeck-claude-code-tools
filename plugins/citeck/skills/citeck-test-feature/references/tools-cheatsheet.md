@@ -13,7 +13,7 @@ DURABLE-ядро: палитра инструментов, теги для ма�
 | Тег | Инструмент | Когда использовать |
 |---|---|---|
 | `[RA]` | **Records API** — `records_query` / `records_mutate` | Setup тестовых данных и verify артефактов после операции. |
-| `[PW]` | **Playwright** — `browser_*` | Многошаговый UI, кнопки, file upload, превью, визуальные проверки. См. `playwright-tips.md`. |
+| `[PW]` | **Playwright** — `browser_*` (режим A) или Node-скрипт на фоновой вкладке (режим B) | Многошаговый UI, кнопки, file upload, превью, визуальные проверки. См. `playwright-tips.md`, «Режимы UI-прогона». |
 | `[HTTP]` | **Scripted HTTP** — `curl` на `<base_url>/gateway/<service>/...` + polling | Concurrency, exotic-эндпоинты, rate-limit, прямые контракты API. |
 | `[LOG]` | **Log inspection** — `tail`/`docker logs` лог сервиса | Системные сообщения, audit, режимы работы, трассировка. |
 | `[FS]` | **Filesystem/Docker** — `docker ps`, правки `application.yml` + restart | Toggle-кейсы (config-кластеры). |

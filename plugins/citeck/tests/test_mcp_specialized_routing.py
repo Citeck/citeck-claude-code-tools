@@ -219,3 +219,34 @@ async def test_changed_confirmed_server_rejects_issue_creation(client, config_di
         assert result["ok"] is False
         assert "server changed" in result["error"]
         mutate.assert_not_called()
+
+
+@pytest.mark.parametrize("tool, params", [
+    ("update_issue", {"issue": "PROJECT-1", "summary": "Adapt plugin"}),
+    ("add_comment", {"issue": "PROJECT-1", "text": "<p>Done</p>"}),
+])
+async def test_changed_confirmed_server_rejects_issue_writes(client, config_dir, tool, params):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
+         patch("servers.citeck_mcp.lib_records_mutate") as mutate:
+        result = (await client.call_tool(tool, {
+            **params, "profile": "prod", "expected_server": "https://previous.example.com"
+        })).data
+        assert result["ok"] is False
+        assert "server changed" in result["error"]
+        mutate.assert_not_called()
+
+
+@pytest.mark.parametrize("tool, params", [
+    ("update_issue", {"issue": "PROJECT-1", "summary": "Adapt plugin"}),
+    ("add_comment", {"issue": "PROJECT-1", "text": "<p>Done</p>"}),
+])
+async def test_confirmed_server_is_kept_for_issue_writes(client, config_dir, tool, params):
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir), \
+         patch("servers.citeck_mcp.lib_records_mutate", return_value={
+             "records": [{"id": "emodel/ept-issue@PROJECT-1", "attributes": {}}]}) as mutate:
+        result = (await client.call_tool(tool, {
+            **params, "profile": "prod", "expected_server": "https://prod.example.com/"
+        })).data
+        assert result["ok"] is True
+        assert mutate.call_args.kwargs["profile"] == "prod"
+        assert mutate.call_args.kwargs["expected_server"] == "https://prod.example.com/"

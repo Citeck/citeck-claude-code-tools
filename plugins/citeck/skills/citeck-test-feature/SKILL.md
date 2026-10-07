@@ -1,18 +1,46 @@
 ---
 name: citeck-test-feature
 description: "Design, audit and run smoke, impact or full acceptance/regression testing of Citeck features, branches and tracker issues. Inventory API/UI/state surfaces, create traceable plans and execute cases with Citeck MCP, browser tools and HTTP."
+allowed-tools: >-
+  Read,
+  Write,
+  Edit,
+  Glob,
+  Grep,
+  AskUserQuestion,
+  Agent,
+  Bash(python3 "${CLAUDE_SKILL_DIR}/scripts/*),
+  Bash(git status*),
+  Bash(git rev-parse *),
+  Bash(git log *),
+  Bash(git diff *),
+  Bash(docker ps*),
+  Bash(docker logs *),
+  mcp__plugin_citeck_citeck__test_connection,
+  mcp__plugin_citeck_citeck__list_profiles,
+  mcp__plugin_citeck_citeck__set_active_profile,
+  mcp__plugin_citeck_citeck__set_records_profile,
+  mcp__plugin_citeck_citeck__reauthenticate,
+  mcp__plugin_citeck_citeck__records_query,
+  mcp__plugin_citeck_citeck__search_issues,
+  mcp__plugin_citeck_citeck__query_comments,
+  mcp__plugin_citeck_citeck__download_attachment,
+  mcp__plugin_playwright_playwright,
+  mcp__playwright
 ---
 
-## Client tools and paths
+## Client compatibility
 
-Use tools available in the current session by purpose; MCP names below are logical
-Citeck tool names, not fixed client prefixes. Client permissions and sandbox rules apply.
-Resolve `SKILL_DIR` to the absolute directory containing this loaded `SKILL.md`.
-Resolve references from that directory and quote script paths, including paths with spaces.
-No automatic context isolation.
-Claude Code: `/citeck:citeck-test-feature`; Codex: select `$citeck:citeck-test-feature`
-from the skill picker, or request the skill by name in natural language.
-
+Shared by Claude Code and Codex.
+- Skill directory: `${CLAUDE_SKILL_DIR}`. Claude Code substitutes it; if it appears unexpanded,
+  use the absolute directory containing this `SKILL.md`.
+- Quote script paths and run each script command as shown, one per call, without loops or
+  shell variables: Claude Code pre-approves exactly these forms.
+- In `references/` and `templates/`, `${SKILL_DIR}` and `<SKILL_DIR>` mean this same directory
+  (not substituted there; use the value above).
+- MCP tools are named without the client prefix.
+- User-question mechanism: `AskUserQuestion` in Claude Code; elsewhere the client's question
+  tool, or ask in chat and wait for the answer.
 
 # Citeck Test Feature
 
@@ -24,12 +52,12 @@ from the skill picker, or request the skill by name in natural language.
 ошибки консоли и неудачные сетевые запросы. Недоступные операции указать в отчёте;
 не объявлять связанные проверки выполненными.
 UI-приёмка — в видимом окне без смены фокуса; см.
-`references/playwright-tips.md`, раздел «Видимое окно браузера».
+`references/playwright-tips.md`, разделы «Видимое окно браузера» и «Режимы UI-прогона».
 
 ⚠ **Где пишется план:** сгенерированная папка идёт в **целевой проект**
 (`<project>/docs/plans/<YYYY-MM-DD>-<issue>-test-plan/`), НЕ в репозиторий плагина.
 
-## Durable-ядро (читать по необходимости из `${SKILL_DIR}/`)
+## Durable-ядро (читать по необходимости из `${CLAUDE_SKILL_DIR}/`)
 
 | Файл | Когда читать |
 |---|---|
@@ -58,7 +86,7 @@ permanent defect guards; `smoke` — только liveness/golden journey и н�
 
 ### 2. Выбор стенда и разрешённых операций
 
-Прочитать `${SKILL_DIR}/references/environment.md` и применимые инструкции проекта об авторизации.
+Прочитать `${CLAUDE_SKILL_DIR}/references/environment.md` и применимые инструкции проекта об авторизации.
 Через `list_profiles` выбрать профиль и сверить его адрес с `test_connection.url`.
 Показать пользователю фактический профиль и адрес, сохранить их для всех HTTP/UI/Records операций.
 Предпочитать явный `profile` для каждого вызова; при необходимости смены через `set_active_profile`/`set_records_profile`
@@ -71,7 +99,7 @@ active/records-профиль указывает на production. Профиль
 Авторизацию брать из инструкций проекта, не угадывать пароль или способ входа.
 
 Применить декларацию `<project>/docs/plans/.test-stands.yml`; если её нет, предложить создать
-из `${SKILL_DIR}/templates/test-stands.yml`. Декларация имеет приоритет над справочником.
+из `${CLAUDE_SKILL_DIR}/templates/test-stands.yml`. Декларация имеет приоритет над справочником.
 Не определять класс стенда по hostname. Если стенд не указан в политике, остановить выполнение
 до согласования и записи классификации. Мутации допустимы только на non-prod с
 `destructive_allowed: true`, в `allowed_workspaces`, с уникальным `run-id`.
@@ -90,7 +118,7 @@ sinks и UI entry points. У каждой включённой поверхно�
 причины и owner.
 
 Начальный inventory для типового Citeck repo:
-`python3 "${SKILL_DIR}/scripts/discover-surfaces.py" <project> --output <PLAN_DIR>/surface-inventory.tsv`.
+`python3 "${CLAUDE_SKILL_DIR}/scripts/discover-surfaces.py" <project> --output <PLAN_DIR>/surface-inventory.tsv`.
 Это discovery hints, не готовый оракул: вручную добавить динамические routes/state transitions и
 review каждую строку.
 
@@ -122,7 +150,7 @@ tool call, progress или log — промежуточные assertions.
 а также `case-manifest.tsv`, `surface-inventory.tsv`, `scenario-matrix.tsv`, `TRACEABILITY.md`,
 `OPEN-DECISIONS.md`.
 Предпочитать:
-`python3 "${SKILL_DIR}/scripts/scaffold-plan.py" --project-root ... --issue ... --feature ...`.
+`python3 "${CLAUDE_SKILL_DIR}/scripts/scaffold-plan.py" --project-root ... --issue ... --feature ...`.
 **Защита от затирания:**
 - Корень плана создаётся **эксклюзивно** (create-only). Если папка уже есть — не перезаписывать
   молча: предложить `--resume` (дописать недостающее) либо новый прогон.
@@ -135,13 +163,13 @@ tool call, progress или log — промежуточные assertions.
 
 ### 7. Design gate и pre-flight
 До live-прогона выполнить
-`python3 "${SKILL_DIR}/scripts/validate-plan.py" <PLAN_DIR>`. Orphan surface/case, missing
+`python3 "${CLAUDE_SKILL_DIR}/scripts/validate-plan.py" <PLAN_DIR>`. Orphan surface/case, missing
 runner, неполный case block, неизвестный trace ID или открытое blocking decision останавливают full.
 
 Зафиксировать `HEAD`, dirty baseline, `DEPLOYED_SHA`, profile/base URL, provider/model/config и
 dependency health. Smoke стенда (containers/порт/availability — см. `environment.md` §3).
 Генерация test-data при
-файловых кейсах: `python3 "${SKILL_DIR}/scripts/make-text-files.py" <out-dir>` и т.п.
+файловых кейсах: `python3 "${CLAUDE_SKILL_DIR}/scripts/make-text-files.py" <out-dir>` и т.п.
 (скрипты платформо-агностичны).
 
 ### 8. Выполнение проверок
@@ -149,7 +177,7 @@ dependency health. Smoke стенда (containers/порт/availability — см
 и разрешении в текущей сессии. Иначе главный агент выполняет те же задания последовательно,
 сохраняя все случаи, блокировки и критерии результата. Строить execution DAG из dependencies/resource
 locks: read-only Tier A параллельно; общие record/conversation/config locks последовательно; Tier B
-одним браузером. `A+B` имеет один итоговый ID: API runner передаёт fixture/output Tier B и до
+одним браузером в одном режиме UI-прогона (A или B из playwright-tips, «Режимы UI-прогона»). `A+B` имеет один итоговый ID: API runner передаёт fixture/output Tier B и до
 reconciliation не ставит PASS. После каждого субагента дописывать отчёт.
 
 ### 9. Отчёт, cleanup и гейт
@@ -159,7 +187,7 @@ captured config baseline без destructive Git-команд.
 
 Для `full` каждый `required=yes` ID обязан быть `PASS`; `FAIL/BLOCKED/NOT_RUN/SKIP/PARTIAL` =
 `NOT_READY`. Проверить совпадение HEAD/DEPLOYED_SHA, report rows с manifest и повторно запустить
-`python3 "${SKILL_DIR}/scripts/validate-plan.py" <PLAN_DIR> --scope full --report <REPORT>`
+`python3 "${CLAUDE_SKILL_DIR}/scripts/validate-plan.py" <PLAN_DIR> --scope full --report <REPORT>`
 (`<REPORT>` — путь **относительно `<PLAN_DIR>`**, напр. `reports/<date>-<run-id>.md`).
 Для `smoke` и `impact` также передавать соответствующий `--scope` и `--report`; выполнение без
 отчёта не является прогоном. В отчёте smoke/impact обязательна строка `**Scope limitation:**`, а

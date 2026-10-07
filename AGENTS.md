@@ -14,8 +14,16 @@ and Codex CLI. Read `CLAUDE.md` for architecture and testing conventions.
 - Installation: `README.md`; changes: `RELEASE_NOTES.md`.
 - Adaptation progress and remaining checks: `docs/plans/2026-10-05-codex-plugin-adaptation.md`.
 
-Keep common skills independent of client tool names and variables. Resolve resources relative
-to the installed `SKILL.md`, preserve issue preview/confirmation and explicit target profiles.
+Skills are shared by both clients; follow these rules:
+- Frontmatter keys stay within the Agent Skills spec (`name`, `description`, `license`,
+  `compatibility`, `metadata`, `allowed-tools`). `allowed-tools` pre-approves tools in Claude Code
+  and uses `mcp__plugin_citeck_citeck__<tool>` names; Codex ignores it.
+- Skill bodies name MCP tools without a client prefix and use `${CLAUDE_SKILL_DIR}` for paths.
+  Claude Code substitutes it only in `SKILL.md`; the preamble tells other clients to use the
+  `SKILL.md` directory. Referenced files use `${SKILL_DIR}`/`<SKILL_DIR>` for the same value.
+- Do not use `context: fork` (forked skills cannot ask the user), `` !`cmd` `` or `$ARGUMENTS`.
+- Codex display and invocation policy: `skills/<name>/agents/openai.yaml`.
+Preserve issue preview/confirmation and explicit target profiles.
 Never log credentials or tokens, or modify a user's client configuration during package tests.
 Use isolated temporary profiles for installation checks. Commit and publication require a
 separate user instruction for this adaptation.

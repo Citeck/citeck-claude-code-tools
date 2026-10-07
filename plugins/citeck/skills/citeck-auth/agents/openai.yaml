@@ -1,0 +1,3 @@
+interface:
+  display_name: "Citeck: Auth"
+  short_description: "Set up Citeck profiles, credentials and connectivity"

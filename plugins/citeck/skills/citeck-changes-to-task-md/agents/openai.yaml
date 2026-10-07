@@ -1,0 +1,3 @@
+interface:
+  display_name: "Citeck: Changes to task.md"
+  short_description: "Write task.md from current git changes"

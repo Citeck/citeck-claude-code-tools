@@ -1,18 +1,22 @@
 ---
 name: citeck-ask-docs
 description: "Ask a question about the Citeck ECOS platform — searches citeck-docs via RAG and synthesizes an answer with citations. Use when the user asks how Citeck works, how to configure something, or about platform concepts."
+allowed-tools: >-
+  AskUserQuestion,
+  Read,
+  Grep,
+  Glob,
+  mcp__plugin_citeck_citeck__search_docs,
+  mcp__plugin_citeck_citeck__set_docs_profile,
+  mcp__plugin_citeck_citeck__list_profiles
 ---
 
-## Client tools and paths
+## Client compatibility
 
-Use tools available in the current session by purpose; MCP names below are logical
-Citeck tool names, not fixed client prefixes. Client permissions and sandbox rules apply.
-Resolve `SKILL_DIR` to the absolute directory containing this loaded `SKILL.md`.
-Resolve references from that directory and quote script paths, including paths with spaces.
-These instructions do not create an isolated context automatically.
-Claude Code: `/citeck:citeck-ask-docs`; Codex: select `$citeck:citeck-ask-docs`
-from the skill picker, or request the skill by name in natural language.
-
+Shared by Claude Code and Codex.
+- MCP tools are named without the client prefix.
+- User-question mechanism: `AskUserQuestion` in Claude Code; elsewhere the client's question
+  tool, or ask in chat and wait for the answer.
 
 # Ask Citeck Documentation
 

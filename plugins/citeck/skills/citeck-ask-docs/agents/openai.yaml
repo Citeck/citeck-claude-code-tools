@@ -1,0 +1,3 @@
+interface:
+  display_name: "Citeck: Ask Docs"
+  short_description: "Answer Citeck platform questions from citeck-docs"

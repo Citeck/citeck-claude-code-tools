@@ -31,9 +31,9 @@ Tools below use logical names. Find the available Citeck MCP tools by their desc
 - `search_issues` — search issues with filters
 - `preview_issue` — read-only, human-readable preview of an issue create/update (refs resolved to names, description rendered from Lexical HTML); call before `create_issue`/`update_issue`
 - `create_issue` — create an issue after `preview_issue`; pass the confirmed preview `server` as `expected_server` to reject target changes before the HTTP write
-- `update_issue` — update an issue (always updates; preview via `preview_issue`)
+- `update_issue` — update an issue (always updates; preview via `preview_issue`); accepts `expected_server` like `create_issue`
 - `preview_comment` — read-only, human-readable preview of a comment; call before `add_comment`
-- `add_comment` — add a comment to an issue (always posts; preview via `preview_comment`)
+- `add_comment` — add a comment to an issue (always posts; preview via `preview_comment`); accepts `expected_server` from the confirmed preview
 - `query_comments` — fetch comments for a record with auto-download of image attachments
 - `download_attachment` — download a file from Citeck via authenticated session
 - `query_sprints`, `query_components`, `query_tags`, `query_releases` — project metadata

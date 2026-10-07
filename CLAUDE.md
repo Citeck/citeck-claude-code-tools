@@ -33,21 +33,24 @@ MCP Server (FastMCP, persistent process)
   └── provides tools: ping, test_connection, reauthenticate, records_query, records_mutate,
       list_projects, set_project_default, list_profiles, set_active_profile,
       set_docs_profile, set_ept_profile, set_records_profile,
-      search_issues, create_issue, update_issue, query_sprints,
+      search_issues, preview_issue, create_issue, update_issue,
+      preview_comment, add_comment, query_sprints,
       query_components, query_tags, query_releases, query_comments,
       download_attachment, search_docs
   └── imports shared modules from lib/
 Skills (user-invocable via /citeck:<name>)
   └── citeck-auth: PKCE browser flow (runs Python scripts)
+  └── citeck-ask-docs: RAG search over citeck-docs (uses MCP search_docs)
   └── citeck-changes-to-task: workflow orchestration (uses MCP tools)
   └── citeck-changes-to-task-md: generates task.md from git changes
+  └── citeck-test-feature: feature acceptance testing (MCP + browser tools + HTTP)
 ```
 
 ### MCP Server (`servers/citeck_mcp.py`)
 
 The primary transport layer. A single FastMCP process runs persistently, providing all Citeck tools via the MCP protocol. Benefits over the previous script-based approach:
 - Persistent auth session — no cold start per call
-- Clean UX: `mcp__citeck__create_issue(...)` instead of 7 Bash calls
+- Clean UX: one `create_issue` tool call instead of 7 Bash calls (the client adds its own prefix, e.g. `mcp__plugin_citeck_citeck__create_issue` in Claude Code)
 - In-memory caching (e.g., project list)
 
 Started via `uv run` (see `.mcp.json`). Dependencies managed by `pyproject.toml`.
@@ -66,9 +69,12 @@ Used by both the MCP server and remaining skill scripts (citeck-auth).
 Skills under `skills/`:
 
 - `citeck-auth` — PKCE browser flow, runs Python scripts using the client shell tool
+- `citeck-ask-docs` — answers Citeck platform questions via `search_docs` with citations
 - `citeck-changes-to-task` — workflow skill using MCP tools
 - `citeck-changes-to-task-md` — generates task.md, uses git and file writing (no MCP)
 - `citeck-test-feature` — guide + scaffolder for feature acceptance testing; `references/` (durable methodology), `examples/` (profile), `templates/` (generated plan), `scripts/` (fixture generators). Uses Citeck MCP + available Playwright MCP or browser tools + scripted HTTP
+
+Each skill may also have `agents/openai.yaml` (Codex display name and invocation policy).
 
 ## Testing patterns
 
@@ -90,6 +96,6 @@ Conventional commits: `feat:`, `fix:`, `refactor:`, `chore:`.
 
 `.agents/plugins/marketplace.json` exposes the same plugin for Codex.
 `plugins/citeck/.codex-plugin/plugin.json` uses `.mcp.codex.json` with plugin-relative `cwd`.
-Both manifests must have the same name/version. Skills are shared; client tool prefixes and
-permissions are resolved in the session. See `AGENTS.md` and
+Both manifests must have the same name/version. Skills are shared by both clients; follow the
+skill rules in `AGENTS.md`. See also
 `docs/plans/2026-10-05-codex-plugin-adaptation.md` for checks and current limitations.

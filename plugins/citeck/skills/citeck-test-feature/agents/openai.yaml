@@ -1,0 +1,3 @@
+interface:
+  display_name: "Citeck: Test Feature"
+  short_description: "Plan and run acceptance testing of a Citeck feature"

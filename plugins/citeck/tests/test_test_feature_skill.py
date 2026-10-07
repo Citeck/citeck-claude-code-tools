@@ -6,6 +6,7 @@ import csv
 import importlib.util
 import os
 import re
+import shutil
 from argparse import Namespace
 import subprocess
 import sys
@@ -198,6 +199,10 @@ class TestScaffoldPlan(unittest.TestCase):
                 "reports/2026-07-31-r1.md",
             ):
                 self.assertTrue((plan / name).is_file(), name)
+            for name in ("tier-a-feature.md", "tier-b-ui.md"):
+                prompt = (plan / "subagent-prompts" / name).read_text()
+                self.assertNotIn("<SKILL_DIR>", prompt, name)
+                self.assertIn(f"{SKILL_DIR}/references/environment.md", prompt, name)
 
             readme = plan / "README.md"
             readme.write_text("do not overwrite\n")
@@ -639,6 +644,70 @@ class TestSkillStaticContracts(unittest.TestCase):
                     f"step {number} reads {name}, table says {sorted(table[name])}",
                 )
 
+
+
+BACKGROUND_TAB_HARNESS = r"""
+const assert = require('node:assert');
+const { createBackgroundPage } = require(process.argv[1]);
+
+function fakeBrowser({ createdId, pages }) {
+  const calls = { sent: [], detached: 0 };
+  const cdp = {
+    async send(method, params) {
+      calls.sent.push([method, params]);
+      if (method === 'Target.createTarget') return { targetId: createdId };
+      return {};
+    },
+    async detach() { calls.detached += 1; },
+  };
+  const context = {
+    pages: () => pages,
+    async newCDPSession(page) {
+      return {
+        async send() { return { targetInfo: { targetId: page.targetId } }; },
+        async detach() { calls.detached += 1; },
+      };
+    },
+  };
+  return { calls, browser: { newBrowserCDPSession: async () => cdp, contexts: () => [context] } };
+}
+
+const page = (targetId, closed = false) => ({ targetId, isClosed: () => closed });
+
+(async () => {
+  const user = page('USER');
+  const stale = page('NEW', true);
+  const created = page('NEW');
+  const found = fakeBrowser({ createdId: 'NEW', pages: [user, stale, created] });
+  const result = await createBackgroundPage(found.browser);
+  assert.strictEqual(result.page, created);
+  assert.strictEqual(result.targetId, 'NEW');
+  assert.deepStrictEqual(found.calls.sent[0],
+    ['Target.createTarget', { url: 'about:blank', background: true }]);
+  assert.ok(!found.calls.sent.some(([method]) => method === 'Target.activateTarget'));
+  assert.strictEqual(found.calls.detached, 3);
+
+  const missing = fakeBrowser({ createdId: 'LOST', pages: [user] });
+  await assert.rejects(createBackgroundPage(missing.browser, { timeout: 20 }),
+    /did not become available/);
+  assert.ok(missing.calls.sent.some(([method, params]) =>
+    method === 'Target.closeTarget' && params.targetId === 'LOST'));
+  console.log('ok');
+})().catch(error => { console.error(error); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class TestBackgroundTabHelper(unittest.TestCase):
+    def test_creates_background_tab_and_cleans_up_on_timeout(self):
+        result = subprocess.run(
+            ["node", "-e", BACKGROUND_TAB_HARNESS, str(SKILL_DIR / "examples" / "background-tab.cjs")],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "ok")
 
 
 if __name__ == "__main__":

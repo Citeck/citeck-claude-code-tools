@@ -9,6 +9,8 @@
 **Метод:** mix Tier A + Tier B (зависит от кейсов). Один субагент на кластер (рестарт = дорого).
 **Стенд:** `<BASE_URL>`. **Run-id:** `<RUN_ID>`.
 
+`<SKILL_DIR>` — абсолютный путь к каталогу навыка `citeck-test-feature`; субагент не вычисляет его сам.
+
 ## Pre-conditions (оркестратор делает ДО запуска субагента)
 1. Применить config (см. `references/tier-cluster-model.md` → шаблон смены кластера):
    `<patch application.yml или исходника>`. ⚠ Только если стенд `destructive_allowed: true`.
@@ -18,8 +20,8 @@
 
 ## Контекст (прочитать один раз)
 1. README плана
-2. Скилл `references/tier-cluster-model.md` (твой кластер `<N>`)
-3. Скилл `references/tools-cheatsheet.md` / `playwright-tips.md` (по типу кейсов)
+2. `<SKILL_DIR>/references/tier-cluster-model.md` (твой кластер `<N>`)
+3. `<SKILL_DIR>/references/tools-cheatsheet.md` / `playwright-tips.md` (по типу кейсов)
 4. `cases/<нужный>.md`
 
 ## Кейсы

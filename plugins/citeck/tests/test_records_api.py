@@ -398,10 +398,6 @@ class TestExceptionHierarchy(unittest.TestCase):
         self.assertTrue(issubclass(records_api.RecordsConnectionError, records_api.RecordsApiError))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestConfirmedServer(RecordsApiTestBase):
     def test_changed_server_stops_before_authentication(self):
         with patch('lib.auth.get_auth_header') as authenticate, \
@@ -445,3 +441,7 @@ class TestConfirmedServer(RecordsApiTestBase):
                 records_api.records_mutate([], profile='default', config_dir=self.tmpdir,
                                            expected_server='http://localhost')
             send.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

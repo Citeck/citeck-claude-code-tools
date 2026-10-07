@@ -73,7 +73,9 @@ codex plugin add citeck@citeck
 В Codex выберите `$citeck:citeck-auth`, `$citeck:citeck-ask-docs`,
 `$citeck:citeck-changes-to-task`, `$citeck:citeck-changes-to-task-md` или
 `$citeck:citeck-test-feature` в списке навыков. Можно описать задачу обычным текстом.
-В Claude Code используйте `/citeck:<skill-name>`. Оба клиента читают общие файлы навыков.
+`$citeck:citeck-changes-to-task` создаёт записи в трекере, поэтому Codex запускает его только
+при явном выборе. В Claude Code используйте `/citeck:<skill-name>`. Оба клиента читают общие
+файлы навыков; в Claude Code поле `allowed-tools` заранее разрешает команды и инструменты навыка.
 
 Первый запуск `uv` устанавливает зависимости и требует доступа к Python-репозиторию.
 В конфигурации Codex задано `startup_timeout_sec = 180` и `tool_timeout_sec = 300`:
@@ -135,7 +137,7 @@ claude --plugin-dir ./plugins/citeck
 The MCP server starts automatically via `uv run` — dependencies are installed on first launch, no manual setup needed.
 
 After installation:
-- MCP tools are available automatically (e.g. `mcp__citeck__create_issue`)
+- MCP tools are available automatically (in Claude Code as `mcp__plugin_citeck_citeck__<tool_name>`, e.g. `mcp__plugin_citeck_citeck__create_issue`)
 - Skills are available with the `citeck:` prefix (e.g. `/citeck:citeck-auth`)
 
 ### Update
@@ -156,7 +158,7 @@ Or enable auto-update: `/plugin` → **Marketplaces** → `citeck` → **Enable 
 
 ### MCP Tools
 
-The plugin provides an MCP server with the following tools, available as `mcp__citeck__<tool_name>`:
+The plugin provides an MCP server `citeck` with the following tools. Each client adds its own prefix (in Claude Code: `mcp__plugin_citeck_citeck__<tool_name>`):
 
 | Tool | Description |
 |------|-------------|

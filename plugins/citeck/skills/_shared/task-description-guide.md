@@ -14,7 +14,9 @@ Run `git branch --show-current` to get the current branch name, then:
 Run these git commands using the base determined in Step 1:
 
 - `git log <base>..HEAD --oneline` for the commit history
-- `git diff <base>..HEAD` for the full content diff
+- `git diff --stat <base>..HEAD` for the list of changed files
+- `git diff <base>..HEAD -- <path>` for the content of relevant files; read the full
+  `git diff <base>..HEAD` only when it is small. This keeps the session context compact.
 
 Read and understand all the changes:
 - What files were modified, added, or deleted

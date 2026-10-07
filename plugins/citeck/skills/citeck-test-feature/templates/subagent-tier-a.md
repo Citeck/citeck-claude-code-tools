@@ -9,12 +9,13 @@
 (`records_query`/`records_mutate`, profile `<PROFILE>`) + лог сервиса.
 **Стенд:** `<BASE_URL>`, классификация `<CLASSIFICATION>`. **Run-id:** `<RUN_ID>`,
 песочница `<TEST_WORKSPACE>`.
+`<SKILL_DIR>` — абсолютный путь к каталогу навыка `citeck-test-feature`; субагент не вычисляет его сам.
 
 ## Контекст (прочитать один раз перед стартом)
 1. README плана — общий план + кластеры
-2. Скилл `references/environment.md` — стенд, safety, smoke
-3. Скилл `references/tools-cheatsheet.md` — gateway harness, async-polling
-4. Скилл `references/records-api-patterns.md` — setup/verify
+2. `<SKILL_DIR>/references/environment.md` — стенд, safety, smoke
+3. `<SKILL_DIR>/references/tools-cheatsheet.md` — gateway harness, async-polling
+4. `<SKILL_DIR>/references/records-api-patterns.md` — setup/verify
 5. `cases/<нужный>.md` — описания кейсов по ID ниже
 
 ## Кейсы

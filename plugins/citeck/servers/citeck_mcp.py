@@ -1139,6 +1139,12 @@ def _prepare_create_record(
     return record, resolved, creds["url"].rstrip("/")
 
 
+def _check_confirmed_server(server_url: str, expected_server: str | None) -> None:
+    """Raise ValueError when the resolved server differs from the confirmed preview's server."""
+    if expected_server is not None and server_url != expected_server.rstrip("/"):
+        raise ValueError("Profile server changed. Preview again and confirm the new server.")
+
+
 @mcp.tool
 def create_issue(
     type: str,
@@ -1217,17 +1223,14 @@ def create_issue(
             config_dir=config_dir,
         )
 
-        if expected_server is not None and server_url != expected_server.rstrip("/"):
-            return {"ok": False, "error": "Profile server changed. Preview the issue again and confirm the new server."}
-
-        # Preserve the confirmed destination across the final HTTP preparation.
-        target_guard = {"expected_server": expected_server} if expected_server is not None else {}
+        _check_confirmed_server(server_url, expected_server)
         result = lib_records_mutate(
             records=[record],
             version=1,
             profile=resolved,
             config_dir=config_dir,
-            **target_guard,
+            # Preserve the confirmed destination across the final HTTP preparation.
+            expected_server=expected_server,
         )
 
         result_records = result.get("records", [])
@@ -1406,6 +1409,7 @@ def update_issue(
     links_clone: list[str] | None = None,
     links_problem: list[str] | None = None,
     profile: str | None = None,
+    expected_server: str | None = None,
 ) -> dict:
     """Update an issue in Citeck Project Tracker. This actually updates the issue.
 
@@ -1432,6 +1436,7 @@ def update_issue(
         links_clone: Issue links of type "is cloned from" — list of issue references. Replaces the current value.
         links_problem: Issue links of type "is caused by" / problem — list of issue references. Replaces the current value.
         profile: Override the profile for this call only. Usually leave empty.
+        expected_server: Confirmed preview's server URL. Reject a changed target before writing.
     """
     config_dir = _get_config_dir()
 
@@ -1455,12 +1460,14 @@ def update_issue(
             config_dir=config_dir,
         )
 
-        # Actually update
+        _check_confirmed_server(server_url, expected_server)
         result = lib_records_mutate(
             records=[record],
             version=1,
             profile=resolved,
             config_dir=config_dir,
+            # Preserve the confirmed destination across the final HTTP preparation.
+            expected_server=expected_server,
         )
 
         result_records = result.get("records", [])
@@ -2208,6 +2215,7 @@ def add_comment(
     issue: str,
     text: str,
     profile: str | None = None,
+    expected_server: str | None = None,
 ) -> dict:
     """Add a comment to an issue in Citeck Project Tracker. This actually posts the comment.
 
@@ -2222,17 +2230,21 @@ def add_comment(
                (e.g. "emodel/ept-issue@COREDEV-42"). UUID-based refs are not supported.
         text: Comment body in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
         profile: Override the profile for this call only. Usually leave empty.
+        expected_server: Confirmed preview's server URL. Reject a changed target before writing.
     """
     config_dir = _get_config_dir()
 
     try:
         record, resolved, server_url = _prepare_comment_record(issue, text, profile, config_dir)
 
+        _check_confirmed_server(server_url, expected_server)
         result = lib_records_mutate(
             records=[record],
             version=1,
             profile=resolved,
             config_dir=config_dir,
+            # Preserve the confirmed destination across the final HTTP preparation.
+            expected_server=expected_server,
         )
 
         result_records = result.get("records", [])

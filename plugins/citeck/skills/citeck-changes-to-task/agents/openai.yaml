@@ -1,0 +1,6 @@
+interface:
+  display_name: "Citeck: Changes to Task"
+  short_description: "Create a tracker issue from current git changes"
+policy:
+  # Creates tracker records: run only when the user selects the skill explicitly.
+  allow_implicit_invocation: false

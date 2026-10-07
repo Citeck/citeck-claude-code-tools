@@ -67,7 +67,8 @@ def main() -> int:
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
-    templates = Path(__file__).resolve().parent.parent / "templates"
+    skill_dir = Path(__file__).resolve().parent.parent
+    templates = skill_dir / "templates"
     plan_dir = (
         args.project_root.resolve()
         / "docs"
@@ -84,6 +85,8 @@ def main() -> int:
         "RUN_ID": args.run_id,
         "ISSUE": args.issue,
         "FEATURE": args.feature,
+        # Subagent prompts live in the plan directory and need absolute skill paths.
+        "SKILL_DIR": str(skill_dir),
     }
     created: list[Path] = []
     skipped: list[Path] = []

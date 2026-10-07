@@ -1,18 +1,33 @@
 ---
 name: citeck-changes-to-task
 description: "Create a Citeck Project Tracker issue from current git changes"
+allowed-tools: >-
+  Bash(git branch --show-current),
+  Bash(git branch -r),
+  Bash(git merge-base *),
+  Bash(git log *),
+  Bash(git diff *),
+  Read,
+  AskUserQuestion,
+  mcp__plugin_citeck_citeck__list_profiles,
+  mcp__plugin_citeck_citeck__list_projects,
+  mcp__plugin_citeck_citeck__set_project_default,
+  mcp__plugin_citeck_citeck__query_components,
+  mcp__plugin_citeck_citeck__query_tags,
+  mcp__plugin_citeck_citeck__query_releases,
+  mcp__plugin_citeck_citeck__preview_issue,
+  mcp__plugin_citeck_citeck__records_query,
+  mcp__plugin_citeck_citeck__create_issue
 ---
 
-## Client tools and paths
+## Client compatibility
 
-Use tools available in the current session by purpose; MCP names below are logical
-Citeck tool names, not fixed client prefixes. Client permissions and sandbox rules apply.
-Resolve `SKILL_DIR` to the absolute directory containing this loaded `SKILL.md`.
-Resolve references from that directory and quote script paths, including paths with spaces.
-These instructions do not create an isolated context automatically.
-Claude Code: `/citeck:citeck-changes-to-task`; Codex: select `$citeck:citeck-changes-to-task`
-from the skill picker, or request the skill by name in natural language.
-
+Shared by Claude Code and Codex.
+- Skill directory: `${CLAUDE_SKILL_DIR}`. Claude Code substitutes it; if it appears unexpanded,
+  use the absolute directory containing this `SKILL.md`.
+- MCP tools are named without the client prefix.
+- User-question mechanism: `AskUserQuestion` in Claude Code; elsewhere the client's question
+  tool, or ask in chat and wait for the answer.
 
 # Citeck Changes to Task
 
@@ -49,7 +64,7 @@ The flow MUST always be:
 Read the shared task description guide and follow it:
 
 ```
-Read file: ${SKILL_DIR}/../_shared/task-description-guide.md
+Read file: ${CLAUDE_SKILL_DIR}/../_shared/task-description-guide.md
 ```
 
 Follow Steps 1-4 from the guide to:
@@ -84,9 +99,11 @@ Automatically determine:
 
 3. **Tags** — call `query_tags(project: "KEY", profile: "<selected profile>")` and pick relevant ones. Omit if none match.
 
-Resolve **assignee** and **fix_in_version** from the request or applicable user instructions.
-Do not use `me` or a personal username as a universal default. If either is missing, ask the
-user. Use `query_releases(project: "<KEY>", profile: "<selected profile>")` to validate the
+**Assignee:** the current user (`me`) unless the request or applicable user instructions name
+another assignee. Do not ask about the assignee.
+
+**fix_in_version:** take it from the request or applicable user instructions; if it is missing,
+ask the user. Use `query_releases(project: "<KEY>", profile: "<selected profile>")` to validate the
 chosen target release and pass its reference. An explicit choice of no release is allowed;
 otherwise do not silently omit the release. Preserve the chosen assignee and release in
 both preview and creation, including after parameter edits.
@@ -102,7 +119,7 @@ preview_issue(
   summary: "<Title in English>",
   description: "<Description in Russian>",
   priority: "<priority>",
-  assignee: "<selected username>",
+  assignee: "me",  # or the assignee from the request/instructions
   fix_in_version: ["<selected release ref>"],
   profile: "<selected profile>",
   components: ["<ref>"],
@@ -151,7 +168,7 @@ create_issue(
   summary: "<Title in English>",
   description: "<Description in Russian>",
   priority: "<priority>",
-  assignee: "<selected username>",
+  assignee: "me",  # or the assignee from the request/instructions
   fix_in_version: ["<selected release ref>"],
   profile: "<selected profile>",
   expected_server: "<server URL from confirmed preview>",

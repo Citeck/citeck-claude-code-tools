@@ -1,18 +1,31 @@
 ---
 name: citeck-auth
 description: "Configure Citeck ECOS connection - set URL, credentials, and test connectivity. Use when the user needs to set up or manage Citeck authentication."
+allowed-tools: >-
+  Bash(python3 "${CLAUDE_SKILL_DIR}/scripts/setup_pkce.py"*),
+  Bash(python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py"*),
+  Bash(CITECK_PASSWORD=* python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py"*),
+  Bash(python3 "${CLAUDE_SKILL_DIR}/scripts/test_connection.py"*),
+  Bash(python3 "${CLAUDE_SKILL_DIR}/scripts/switch_profile.py"*),
+  AskUserQuestion,
+  mcp__plugin_citeck_citeck__list_profiles,
+  mcp__plugin_citeck_citeck__test_connection,
+  mcp__plugin_citeck_citeck__set_docs_profile,
+  mcp__plugin_citeck_citeck__set_ept_profile,
+  mcp__plugin_citeck_citeck__set_records_profile,
+  mcp__plugin_citeck_citeck__reauthenticate
 ---
 
-## Client tools and paths
+## Client compatibility
 
-Use tools available in the current session by purpose; MCP names below are logical
-Citeck tool names, not fixed client prefixes. Client permissions and sandbox rules apply.
-Resolve `SKILL_DIR` to the absolute directory containing this loaded `SKILL.md`.
-Resolve references from that directory and quote script paths, including paths with spaces.
-These instructions do not create an isolated context automatically.
-Claude Code: `/citeck:citeck-auth`; Codex: select `$citeck:citeck-auth`
-from the skill picker, or request the skill by name in natural language.
-
+Shared by Claude Code and Codex.
+- Skill directory: `${CLAUDE_SKILL_DIR}`. Claude Code substitutes it; if it appears unexpanded,
+  use the absolute directory containing this `SKILL.md`.
+- Quote script paths and run each script command as shown, one per call, without loops or
+  shell variables: Claude Code pre-approves exactly these forms.
+- MCP tools are named without the client prefix.
+- User-question mechanism: `AskUserQuestion` in Claude Code; elsewhere the client's question
+  tool, or ask in chat and wait for the answer.
 
 # Citeck ECOS Authentication Setup
 
@@ -37,7 +50,7 @@ This means Keycloak can live on a different host (e.g., app at `citeck.example.c
 Authenticate via browser without storing passwords. The script opens a browser for Keycloak login and receives tokens automatically:
 
 ```bash
-python3 "${SKILL_DIR}/scripts/setup_pkce.py" --profile <name> --url <url> [--client-id <id>] [--timeout 120]
+python3 "${CLAUDE_SKILL_DIR}/scripts/setup_pkce.py" --profile <name> --url <url> [--client-id <id>] [--timeout 120]
 ```
 
 Parameters:
@@ -56,12 +69,12 @@ The script will:
 For environments without browser access, use password-based setup:
 
 ```bash
-CITECK_PASSWORD='<pass>' python3 "${SKILL_DIR}/scripts/setup.py" --profile <name> --url <url> --username <user> [--auth-method oidc|basic]
+CITECK_PASSWORD='<pass>' python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py" --profile <name> --url <url> --username <user> [--auth-method oidc|basic]
 ```
 
 For OIDC auth with client credentials:
 ```bash
-CITECK_PASSWORD='<pass>' CITECK_CLIENT_ID='<id>' CITECK_CLIENT_SECRET='<secret>' python3 "${SKILL_DIR}/scripts/setup.py" --profile <name> --url <url> --username <user>
+CITECK_PASSWORD='<pass>' CITECK_CLIENT_ID='<id>' CITECK_CLIENT_SECRET='<secret>' python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py" --profile <name> --url <url> --username <user>
 ```
 
 Parameters:
@@ -89,7 +102,7 @@ request that approval when supported or report the limitation. Never silently wi
 permissions or treat a blocked request as invalid credentials.
 
 ```bash
-python3 "${SKILL_DIR}/scripts/test_connection.py" [--profile <name>]
+python3 "${CLAUDE_SKILL_DIR}/scripts/test_connection.py" [--profile <name>]
 ```
 
 Reports whether the connection succeeded, which auth method was used, and any errors.
@@ -99,19 +112,19 @@ Reports whether the connection succeeded, which auth method was used, and any er
 Switch between configured profiles:
 
 ```bash
-python3 "${SKILL_DIR}/scripts/switch_profile.py" --profile <name>
+python3 "${CLAUDE_SKILL_DIR}/scripts/switch_profile.py" --profile <name>
 ```
 
 Lists available profiles when called with `--list`.
 
 ```bash
-python3 "${SKILL_DIR}/scripts/switch_profile.py" --list
+python3 "${CLAUDE_SKILL_DIR}/scripts/switch_profile.py" --list
 ```
 
 Show non-sensitive settings (url, auth_method, client_id) of a specific profile:
 
 ```bash
-python3 "${SKILL_DIR}/scripts/switch_profile.py" --detail <name>
+python3 "${CLAUDE_SKILL_DIR}/scripts/switch_profile.py" --detail <name>
 ```
 
 ## Setup Flow

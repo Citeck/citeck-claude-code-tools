@@ -1,18 +1,24 @@
 ---
 name: citeck-changes-to-task-md
 description: "Generate task.md file with structured task description from git changes"
+allowed-tools: >-
+  Bash(git branch --show-current),
+  Bash(git branch -r),
+  Bash(git merge-base *),
+  Bash(git log *),
+  Bash(git diff *),
+  Read,
+  Write,
+  AskUserQuestion
 ---
 
-## Client tools and paths
+## Client compatibility
 
-Use tools available in the current session by purpose; MCP names below are logical
-Citeck tool names, not fixed client prefixes. Client permissions and sandbox rules apply.
-Resolve `SKILL_DIR` to the absolute directory containing this loaded `SKILL.md`.
-Resolve references from that directory and quote script paths, including paths with spaces.
-These instructions do not create an isolated context automatically.
-Claude Code: `/citeck:citeck-changes-to-task-md`; Codex: select `$citeck:citeck-changes-to-task-md`
-from the skill picker, or request the skill by name in natural language.
-
+Shared by Claude Code and Codex.
+- Skill directory: `${CLAUDE_SKILL_DIR}`. Claude Code substitutes it; if it appears unexpanded,
+  use the absolute directory containing this `SKILL.md`.
+- User-question mechanism: `AskUserQuestion` in Claude Code; elsewhere the client's question
+  tool, or ask in chat and wait for the answer.
 
 # Citeck Changes to Task (Markdown)
 
@@ -29,7 +35,7 @@ Run `git branch --show-current` and `git branch -r` explicitly before choosing t
 Read the shared task description guide and follow it:
 
 ```
-Read file: ${SKILL_DIR}/../_shared/task-description-guide.md
+Read file: ${CLAUDE_SKILL_DIR}/../_shared/task-description-guide.md
 ```
 
 Follow Steps 1-4 from the guide to:
