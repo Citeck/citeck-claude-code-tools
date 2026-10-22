@@ -2,7 +2,9 @@
 name = "citeck-claude-code-tools"
 version = "3.0.0"
 description = "MCP server for Citeck ECOS platform integration with Claude Code and Codex"
-requires-python = ">=3.10"
+# uv starts the server on the newest installed CPython in this range. Raise the upper bound
+# only after `uv lock` resolves wheels for the new release (tests/test_plugin_packaging.py).
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "fastmcp>=2.0.0",
 ]

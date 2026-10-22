@@ -50,6 +50,8 @@ Install uv if you don't have it:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
+The MCP server runs on CPython 3.11–3.14: `uv` uses an installed interpreter from this range or downloads one on first start.
+
 ### Codex CLI
 
 Локальная установка проверена в Codex CLI `0.160.0`:
@@ -147,6 +149,25 @@ claude plugin update citeck@citeck
 ```
 
 Or enable auto-update: `/plugin` → **Marketplaces** → `citeck` → **Enable auto-update**.
+
+### Troubleshooting
+
+**`Failed to connect` / `CONNECTION_CLOSED` for the `citeck` MCP server.** The client only reports that the server process exited. Run the server command in a terminal to see the actual `uv` or Python error:
+
+```bash
+uv run --directory "<installed-plugin-root>" python servers/citeck_mcp.py
+```
+
+In Claude Code `<installed-plugin-root>` is `~/.claude/plugins/cache/citeck/citeck/<version>` (Windows: `%USERPROFILE%\.claude\plugins\cache\citeck\citeck\<version>`). A healthy server logs `Starting MCP server 'citeck'` and waits for input; stop it with `Ctrl+C`.
+
+**`The requested interpreter resolved to Python 3.x, which is incompatible with the project's Python requirement`.** The server supports CPython 3.11–3.14 (`requires-python` in `plugins/citeck/pyproject.toml`): its native dependencies publish wheels for a new Python release only some time after it comes out. Unset `UV_PYTHON` or set it to a version in this range.
+
+**Windows, Claude desktop app: `Missing expected target directory for Python minor version link`.** The desktop app is installed as an MSIX package, and Windows redirects some of its writes under `%APPDATA%` to a private package folder. A Python that `uv` downloads from inside the app can end up behind a broken link ([astral-sh/uv#19622](https://github.com/astral-sh/uv/issues/19622)). Move uv data out of `AppData` with user environment variables, then restart the app:
+
+```powershell
+[Environment]::SetEnvironmentVariable("UV_PYTHON_INSTALL_DIR", "$env:USERPROFILE\.local\share\uv\python", "User")
+[Environment]::SetEnvironmentVariable("UV_CACHE_DIR", "$env:USERPROFILE\.local\share\uv\cache", "User")
+```
 
 ## Plugin: citeck
 

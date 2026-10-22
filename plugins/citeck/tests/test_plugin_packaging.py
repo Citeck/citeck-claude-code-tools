@@ -1,8 +1,10 @@
-"""Validate both clients' package entry points and a relocated stdio server."""
+"""Validate both clients' package entry points, locked wheels and a relocated stdio server."""
 
 import json
+import re
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -36,6 +38,33 @@ def test_manifests_and_marketplaces():
         source = entry["source"]
         path = source if isinstance(source, str) else source["path"]
         assert (REPO / path).resolve() == PLUGIN
+
+
+def wheel_supports(filename, minor):
+    """Whether a wheel installs on the standard (GIL) CPython 3.<minor> build."""
+    pythons, abi = filename.removesuffix(".whl").split("-")[-3:-1]
+    pythons = pythons.split(".")
+    if abi == "none":
+        return "py3" in pythons or f"cp3{minor}" in pythons
+    if abi == "abi3":
+        return any(tag.startswith("cp3") and int(tag[3:]) <= minor for tag in pythons)
+    return abi == f"cp3{minor}"
+
+
+def test_locked_wheels_cover_supported_pythons():
+    # uv may start the server on any CPython in requires-python, and a native package
+    # without a matching wheel breaks the start (issue #4: pywin32 had no cp315 wheel).
+    requires = tomllib.loads((PLUGIN / "pyproject.toml").read_text())["project"]["requires-python"]
+    bounds = re.fullmatch(r">=3\.(\d+)\s*,\s*<3\.(\d+)", requires)
+    assert bounds, f"requires-python must be a bounded range: {requires}"
+    low, high = map(int, bounds.groups())
+    lock = tomllib.loads((PLUGIN / "uv.lock").read_text())
+    missing = [f"{package['name']} {package['version']}: cp3{minor}"
+               for package in lock["package"] if package.get("wheels")
+               for minor in range(low, high)
+               if not any(wheel_supports(wheel["url"].rsplit("/", 1)[-1], minor)
+                          for wheel in package["wheels"])]
+    assert missing == []
 
 
 @pytest.mark.asyncio
