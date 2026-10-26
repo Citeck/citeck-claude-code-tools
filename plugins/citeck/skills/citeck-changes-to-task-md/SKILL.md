@@ -42,7 +42,9 @@ Follow Steps 1-4 from the guide to:
 1. Determine the diff base
 2. Get the changes via git log and git diff
 3. Determine the task type (ask user to confirm)
-4. Generate the title (English) and description (Russian)
+4. Generate the title (English) and description (Russian, Markdown)
+
+**Description format: Markdown.** Use the "Markdown" column of the guide's "Formatting rules".
 
 ### Step 5: Write task.md
 

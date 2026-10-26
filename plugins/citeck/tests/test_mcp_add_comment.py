@@ -152,3 +152,21 @@ async def test_add_comment_api_error(client: Client):
     data = result.data
     assert data["ok"] is False
     assert "500" in data["error"]
+
+
+async def test_add_comment_rejects_markdown(client: Client):
+    """add_comment rejects Markdown text without posting."""
+    config_dir = tempfile.mkdtemp()
+    _setup_credentials(config_dir)
+
+    with patch("servers.citeck_mcp.lib_records_mutate") as mock_mutate, \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("add_comment", {
+            "issue": "COREDEV-42",
+            "text": "- проверено на стенде\n- замечаний нет",
+        })
+
+    data = result.data
+    assert data["ok"] is False
+    assert "'text' looks like Markdown" in data["error"]
+    mock_mutate.assert_not_called()

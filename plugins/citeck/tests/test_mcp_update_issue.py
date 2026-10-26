@@ -324,3 +324,21 @@ async def test_update_issue_epic_clear(client: Client):
     data = result.data
     assert data["ok"] is True
     assert data["record"]["attributes"]["epicLink?str"] == ""
+
+
+async def test_update_issue_rejects_markdown_description(client: Client):
+    """update_issue rejects a Markdown description without writing."""
+    config_dir = tempfile.mkdtemp()
+    _setup_credentials(config_dir)
+
+    with patch("servers.citeck_mcp.lib_records_mutate") as mock_mutate, \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("update_issue", {
+            "issue": "COREDEV-42",
+            "description": "Поле `attributesMapping` пустое",
+        })
+
+    data = result.data
+    assert data["ok"] is False
+    assert "'description' looks like Markdown" in data["error"]
+    mock_mutate.assert_not_called()

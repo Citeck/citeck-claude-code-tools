@@ -71,7 +71,12 @@ Follow Steps 1-4 from the guide to:
 1. Determine the diff base
 2. Get the changes via git log and git diff
 3. Determine the task type (ask user to confirm)
-4. Generate the title (English) and description (Russian)
+4. Generate the title (English) and description (Russian, Lexical HTML)
+
+**Description format: Lexical HTML.** Write the description directly in HTML, using the
+"Lexical HTML" column of the guide's "Formatting rules". Tracker tools store the text as is:
+Markdown is not converted, and the server rejects it. Pass the same HTML to `preview_issue`
+and `create_issue`.
 
 ### Step 5: Resolve tracker environment and project
 
@@ -117,7 +122,7 @@ preview_issue(
   project: "<KEY>",
   type: "<task|story|bug>",
   summary: "<Title in English>",
-  description: "<Description in Russian>",
+  description: "<Description in Russian, Lexical HTML>",
   priority: "<priority>",
   assignee: "me",  # or the assignee from the request/instructions
   fix_in_version: ["<selected release ref>"],
@@ -128,7 +133,9 @@ preview_issue(
 ```
 
 Require `ok: true` and verify the returned `profile` and `server` match the selected target.
-If preview fails or differs from the selected target, stop without creating an issue.
+If the preview reports that the description looks like Markdown, rewrite it in Lexical HTML
+and preview again. If preview fails for another reason or differs from the selected target,
+stop without creating an issue.
 
 Check creation access before writing. For a workspace in the preview's record, load
 `emodel/workspace@<workspace>` through `records_query` with the selected `profile` and
@@ -166,7 +173,7 @@ create_issue(
   project: "<KEY>",
   type: "<task|story|bug>",
   summary: "<Title in English>",
-  description: "<Description in Russian>",
+  description: "<Description in Russian, Lexical HTML>",
   priority: "<priority>",
   assignee: "me",  # or the assignee from the request/instructions
   fix_in_version: ["<selected release ref>"],

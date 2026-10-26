@@ -631,3 +631,24 @@ async def test_create_issue_missing_summary(client: Client):
     data = result.data
     assert data["ok"] is False
     assert "summary" in data["error"].lower()
+
+
+async def test_create_issue_rejects_markdown_description(client: Client):
+    """create_issue rejects a Markdown description before resolving or writing anything."""
+    config_dir = tempfile.mkdtemp()
+    _setup_with_default_project(config_dir)
+
+    with patch("servers.citeck_mcp.lib_records_mutate") as mock_mutate, \
+         patch("servers.citeck_mcp._resolve_project_info") as mock_resolve_project, \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("create_issue", {
+            "type": "bug",
+            "summary": "Fix action save",
+            "description": "#### Шаги воспроизведения\n\n1. Сохранить действие",
+        })
+
+    data = result.data
+    assert data["ok"] is False
+    assert "'description' looks like Markdown" in data["error"]
+    mock_resolve_project.assert_not_called()
+    mock_mutate.assert_not_called()

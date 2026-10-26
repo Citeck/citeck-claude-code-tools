@@ -1061,6 +1061,29 @@ def _build_create_record(
     }
 
 
+_HTML_START_RE = re.compile(r"\s*<[a-zA-Z]")
+_MARKDOWN_RE = re.compile(
+    r"^ {0,3}(?:#{1,6}\s|[-*+]\s|\d{1,3}\.\s|```)"  # heading, list item, code fence
+    r"|\*\*[^*\n]+\*\*"  # bold
+    r"|`[^`\n]+`",  # inline code
+    re.MULTILINE,
+)
+
+
+def _check_lexical_html(value: str | None, field: str) -> None:
+    """Raise ValueError when text without leading HTML tag contains Markdown markup.
+
+    The tracker stores the value as is, so Markdown would show literally.
+    Plain text without markup is allowed.
+    """
+    if value and not _HTML_START_RE.match(value) and _MARKDOWN_RE.search(value):
+        raise ValueError(
+            f"'{field}' looks like Markdown. Pass HTML for the Lexical editor "
+            "(<p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>); "
+            "Markdown is not converted."
+        )
+
+
 def _prepare_create_record(
     *,
     type: str,
@@ -1096,6 +1119,7 @@ def _prepare_create_record(
     if type not in _ISSUE_TYPE_SHORT_NAMES:
         valid = ", ".join(_ISSUE_TYPE_SHORT_NAMES.keys())
         raise ValueError(f"Unknown issue type '{type}'. Valid types: {valid}.")
+    _check_lexical_html(description, "description")
 
     proj_key = project or get_default_project(profile=resolved, config_dir=config_dir)
     if not proj_key:
@@ -1179,7 +1203,7 @@ def create_issue(
         type: Issue type: task, story, bug, epic.
         summary: Issue summary/title in English, imperative mood (required).
         project: Project key (e.g. "COREDEV"). Uses default project if not set.
-        description: Issue description in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
+        description: Issue description in Russian, HTML for the Lexical editor. Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>. Markdown is not converted: text that does not start with an HTML tag and contains Markdown markup is rejected.
         priority: Priority (default: "300_medium"). Options: 100_critical, 200_high, 300_medium, 400_low.
         assignee: Assignee username. Use "me" to auto-resolve to current user.
         sprint: Sprint reference (UUID or full ref).
@@ -1368,6 +1392,7 @@ def _prepare_update_record(
     (read-only).
     """
     resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
+    _check_lexical_html(description, "description")
 
     ok, resolved_assignee = _resolve_assignee(assignee, resolved, config_dir)
     if not ok:
@@ -1426,7 +1451,7 @@ def update_issue(
         assignee: New assignee username. Use "me" to auto-resolve to current user.
         priority: New priority (e.g. "100_critical", "200_high", "300_medium", "400_low").
         summary: New summary/title in English.
-        description: New description in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
+        description: New description in Russian, HTML for the Lexical editor. Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>. Markdown is not converted: text that does not start with an HTML tag and contains Markdown markup is rejected.
         fix_in_version: Target releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Replaces the current value. Use query_releases to find them.
         affected_versions: Affected releases — list of release references (UUID or full "emodel/ecos-release-type@" ref). Replaces the current value. Use query_releases to find them.
         epic: Epic link — single issue reference (PROJECT-N key or full "emodel/ept-issue@" ref). Pass empty string to clear.
@@ -2205,6 +2230,7 @@ def _prepare_comment_record(
     """
     if not text or not text.strip():
         raise ValueError("Comment text is required.")
+    _check_lexical_html(text, "text")
     resolved, creds = resolve_ept_profile(profile=profile, config_dir=config_dir)
     record = _build_comment_record(issue_id=issue, text=text)
     return record, resolved, creds["url"].rstrip("/")
@@ -2228,7 +2254,7 @@ def add_comment(
     Args:
         issue: Issue ID (e.g. "COREDEV-42") or full record ref with PROJECT-NUMBER local ID
                (e.g. "emodel/ept-issue@COREDEV-42"). UUID-based refs are not supported.
-        text: Comment body in Russian, HTML format (Lexical editor). Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>.
+        text: Comment body in Russian, HTML for the Lexical editor. Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>. Markdown is not converted: text that does not start with an HTML tag and contains Markdown markup is rejected.
         profile: Override the profile for this call only. Usually leave empty.
         expected_server: Confirmed preview's server URL. Reject a changed target before writing.
     """
@@ -2307,8 +2333,10 @@ def preview_issue(
       fields you pass are shown).
     - Otherwise → preview a CREATE (requires 'type'; same args as create_issue).
 
-    Args mirror create_issue / update_issue. Returns {ok, preview, profile, server,
-    text, record}. 'text' is the human-readable preview; 'record' is the raw payload.
+    Args mirror create_issue / update_issue. 'description' is HTML for the Lexical
+    editor, as in create_issue; Markdown is not converted and is rejected.
+    Returns {ok, preview, profile, server, text, record}. 'text' is the
+    human-readable preview; 'record' is the raw payload.
     """
     config_dir = _get_config_dir()
 
@@ -2398,7 +2426,7 @@ def preview_comment(
 
     Args:
         issue: Issue ID (e.g. "COREDEV-42") or full record ref with PROJECT-NUMBER local ID.
-        text: Comment body in Russian, HTML format (Lexical editor).
+        text: Comment body in Russian, HTML for the Lexical editor. Use tags: <p>, <h2>, <h3>, <ul>/<li>, <ol>/<li>, <code>, <b>, <i>. Markdown is not converted: text that does not start with an HTML tag and contains Markdown markup is rejected.
         profile: Override the profile for this call only. Usually leave empty.
 
     Returns {ok, preview, profile, server, issue, text, record}.

@@ -20,6 +20,7 @@ from servers.citeck_mcp import (
     _ref_link,
     _render_preview_value,
     _format_record_preview,
+    _check_lexical_html,
 )
 from lib.config import save_credentials, set_default_project, add_project
 
@@ -77,6 +78,49 @@ def test_html_to_markdown_div_blocks_do_not_merge():
 
 def test_indent_skips_blank_lines():
     assert _indent("a\n\nb") == "  a\n\n  b"
+
+
+# --- _check_lexical_html ---
+
+_GUIDE_MARKDOWN = (
+    "Теряется `confirm.attributesMapping`.\n\n"
+    "#### Шаги воспроизведения\n\n"
+    "1. Создать действие\n2. Сохранить\n\n"
+    "**Ожидаемый результат:** сохранён\n"
+    "**Фактический результат:** пустой\n\n"
+    "*Given* действие\n"
+)
+
+
+@pytest.mark.parametrize("value", [
+    _GUIDE_MARKDOWN,
+    "#### Шаги",
+    "Это **важно**",
+    "Поле `x` пустое",
+    "- пункт",
+    "  * пункт",
+    "1. шаг",
+    "```\ncode\n```",
+    "Тег `<p>` не закрывается",
+])
+def test_check_lexical_html_rejects_markdown(value):
+    with pytest.raises(ValueError, match="'description' looks like Markdown"):
+        _check_lexical_html(value, "description")
+
+
+@pytest.mark.parametrize("value", [
+    None,
+    "",
+    "Done",
+    "Готово, проверено на стенде",
+    "a * b = c",
+    "В 2024 году",
+    "<p>Теряется <code>x</code></p><h3>Шаги</h3><ol><li>шаг</li></ol>",
+    "  <b>Важно</b>: <code>x</code>",
+    "<p>Литерал `x` внутри HTML не проверяется</p>",
+])
+def test_check_lexical_html_allows_html_and_plain_text(value):
+    _check_lexical_html(value, "description")
 
 
 # --- ref collection & resolution ---
@@ -206,6 +250,35 @@ async def test_preview_issue_create_returns_text_and_record(client: Client):
     assert "### Why" in data["text"]
 
 
+async def test_preview_issue_create_rejects_markdown_description(client: Client):
+    config_dir = tempfile.mkdtemp()
+    _setup_with_default_project(config_dir)
+    with patch("servers.citeck_mcp._resolve_project_info") as resolve_project, \
+         patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("preview_issue", {
+            "type": "bug",
+            "summary": "Boom",
+            "description": "#### Шаги воспроизведения\n\n1. Сохранить",
+        })
+    data = result.data
+    assert data["ok"] is False
+    assert "Markdown" in data["error"]
+    resolve_project.assert_not_called()
+
+
+async def test_preview_issue_update_rejects_markdown_description(client: Client):
+    config_dir = tempfile.mkdtemp()
+    _setup_with_default_project(config_dir)
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("preview_issue", {
+            "issue": "COREDEV-42",
+            "description": "**Ожидаемый результат:** сохранён",
+        })
+    data = result.data
+    assert data["ok"] is False
+    assert "Markdown" in data["error"]
+
+
 async def test_preview_issue_create_requires_type(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_with_default_project(config_dir)
@@ -253,6 +326,19 @@ async def test_preview_comment_renders_markdown(client: Client):
     assert data["preview"] is True
     assert "Готово — **проверено**" in data["text"]
     assert data["record"]["attributes"]["text?str"] == "<p>Готово — <b>проверено</b></p>"
+
+
+async def test_preview_comment_rejects_markdown(client: Client):
+    config_dir = tempfile.mkdtemp()
+    _setup_with_default_project(config_dir)
+    with patch("servers.citeck_mcp._get_config_dir", return_value=config_dir):
+        result = await client.call_tool("preview_comment", {
+            "issue": "COREDEV-42",
+            "text": "Готово — **проверено**",
+        })
+    data = result.data
+    assert data["ok"] is False
+    assert "'text' looks like Markdown" in data["error"]
 
 
 async def test_preview_comment_empty_text_errors(client: Client):
