@@ -147,6 +147,12 @@ python3 "<installed-plugin-root>/skills/citeck-auth/scripts/setup_pkce.py" --url
 
 The `client_id` defaults to the server hostname if not specified.
 
+If you open the browser manually, the displayed URL is a short, temporary
+`http://127.0.0.1:<port>/login/<random>` link. The local callback server redirects
+it to the exact OAuth URL, so OAuth parameters (including the PKCE challenge)
+no longer need to be copied from the terminal. Open it while authentication is still waiting; it stops working when
+the attempt ends. In a VM, the same port forwarding as for `/callback` is required.
+
 ## Development
 
 Install dependencies:

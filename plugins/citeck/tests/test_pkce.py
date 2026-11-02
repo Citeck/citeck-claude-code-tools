@@ -250,6 +250,54 @@ class TestCallbackServer(unittest.TestCase):
         finally:
             server.shutdown()
 
+    def test_short_login_link_preserves_authorization_url(self):
+        server = CallbackServer()
+        server.set_expected_state("expected")
+        _, challenge = generate_pkce_pair()
+        auth_url = _build_authorization_url(
+            AUTH_ENDPOINT, "citeck-ai-agent",
+            f"http://127.0.0.1:{server.port}/callback", "expected", challenge,
+            scope=DEFAULT_SCOPE,
+        )
+        login_url = server.set_authorization_url(auth_url)
+        from urllib.parse import urlsplit
+        path = urlsplit(login_url).path
+        responses = []
+
+        def browser():
+            try:
+                # Unrelated requests must neither reveal the target nor end login.
+                for request_path in ("/login/wrong", path + "?url=https://evil.invalid", path,
+                                     "/callback?code=abc&state=expected"):
+                    conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=3)
+                    try:
+                        conn.request("GET", request_path)
+                        response = conn.getresponse()
+                        responses.append((response.status, dict(response.getheaders())))
+                        response.read()
+                    finally:
+                        conn.close()
+            except Exception as exc:
+                responses.append(exc)
+
+        thread = threading.Thread(target=browser)
+        try:
+            self.assertLess(len(login_url), 65)
+            self.assertNotIn("code_challenge", login_url)
+            thread.start()
+            result = server.wait_for_callback(timeout=5)
+            thread.join(timeout=5)
+            self.assertEqual([r[0] for r in responses], [404, 404, 302, 200])
+            headers = responses[2][1]
+            self.assertEqual(headers["Location"], auth_url)
+            self.assertEqual(headers["Cache-Control"], "no-store")
+            self.assertEqual(headers["Referrer-Policy"], "no-referrer")
+            self.assertNotIn("Location", responses[0][1])
+            self.assertEqual(result["code"], "abc")
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
     def test_timeout(self):
         server = CallbackServer()
         try:
@@ -261,6 +309,26 @@ class TestCallbackServer(unittest.TestCase):
 
 
 class TestAuthorize(unittest.TestCase):
+    @patch.dict(os.environ, {"CITECK_PKCE_PROGRESS_JSON": "1"})
+    @patch("lib.pkce._exchange_code", return_value={"access_token": "synthetic"})
+    @patch("lib.pkce.webbrowser.open")
+    @patch("lib.pkce.CallbackServer")
+    def test_progress_displays_short_link_not_oauth_parameters(self, mock_server, mock_browser, mock_exchange):
+        server = mock_server.return_value
+        server.port = 19433
+        server.set_authorization_url.return_value = "http://127.0.0.1:19433/login/synthetic"
+        server.wait_for_callback.return_value = {"code": "testcode", "state": "expected"}
+        import io
+        output = io.StringIO()
+        with patch("lib.pkce.generate_state", return_value="expected"), patch("sys.stderr", output):
+            authorize(TOKEN_ENDPOINT, AUTH_ENDPOINT, "citeck-ai-agent")
+        event = json.loads(output.getvalue())
+        self.assertEqual(event, {"event": "authorization_url", "url": server.set_authorization_url.return_value})
+        target = server.set_authorization_url.call_args.args[0]
+        self.assertIn("code_challenge=", target)
+        self.assertNotIn("code_challenge", output.getvalue())
+        mock_browser.assert_called_once_with(target)
+
     @patch.dict(os.environ, {"CITECK_PKCE_CALLBACK_HOST": "0.0.0.0",
                              "CITECK_PKCE_CALLBACK_PORT": "19433"})
     @patch("lib.pkce._exchange_code")

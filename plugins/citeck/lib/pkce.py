@@ -116,6 +116,15 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        login_path = getattr(self.server, "login_path", None)
+        if login_path is not None and parsed.path == login_path and not parsed.query:
+            self.send_response(302)
+            self.send_header("Location", self.server.authorization_url)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if parsed.path != CALLBACK_PATH:
             self.send_error(404)
             return
@@ -193,6 +202,15 @@ class CallbackServer:
                 "No alternative port was selected."
             ) from exc
         self._server.callback_result = None
+
+    def set_authorization_url(self, url):
+        """Expose an unguessable short link so terminal wrapping cannot alter PKCE.
+
+        The redirect target is fixed by this process, never supplied by a request.
+        """
+        self._server.authorization_url = url
+        self._server.login_path = "/login/" + secrets.token_urlsafe(16)
+        return f"http://127.0.0.1:{self.port}{self._server.login_path}"
 
     def set_expected_state(self, state):
         self._server.expected_state = state
@@ -272,11 +290,14 @@ def _authorize_once(token_endpoint, auth_endpoint, client_id, timeout, scope):
             scope=scope,
         )
 
+        # Display a short local link, not a long OAuth URL susceptible to spaces
+        # inserted when users copy wrapped terminal notifications.
+        login_url = server.set_authorization_url(auth_url)
         if os.environ.get("CITECK_PKCE_PROGRESS_JSON") == "1":
-            print(json.dumps({"event": "authorization_url", "url": auth_url}),
+            print(json.dumps({"event": "authorization_url", "url": login_url}),
                   file=sys.stderr, flush=True)
         else:
-            print(f"\nOpen this URL in your browser to log in:\n\n  {auth_url}\n",
+            print(f"\nOpen this URL in your browser to log in:\n\n  {login_url}\n",
                   file=sys.stderr, flush=True)
         try:
             webbrowser.open(auth_url)
