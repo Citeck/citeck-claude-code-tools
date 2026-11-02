@@ -189,13 +189,11 @@ class TestFormatComments:
 # -- MCP tool tests --
 
 
-@pytest.mark.anyio
 async def test_query_comments_tool_exists(client: Client):
     tools = await client.list_tools()
     assert "query_comments" in [t.name for t in tools]
 
 
-@pytest.mark.anyio
 async def test_query_comments_basic(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -258,7 +256,6 @@ async def test_query_comments_basic(client: Client):
     assert call_kwargs["page"] == {"skipCount": 0, "maxItems": 50}
 
 
-@pytest.mark.anyio
 async def test_query_comments_with_images(client: Client):
     """Comments with images auto-download, return local paths, and replace URLs in textHtml."""
     config_dir = tempfile.mkdtemp()
@@ -302,7 +299,6 @@ async def test_query_comments_with_images(client: Client):
     mock_download.assert_called_once()
 
 
-@pytest.mark.anyio
 async def test_query_comments_image_download_failure_graceful(client: Client):
     """Failed image download doesn't break comments."""
     config_dir = tempfile.mkdtemp()
@@ -338,7 +334,6 @@ async def test_query_comments_image_download_failure_graceful(client: Client):
     assert "error" in comment["images"][0]
 
 
-@pytest.mark.anyio
 async def test_query_comments_empty_record_ref(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -351,7 +346,6 @@ async def test_query_comments_empty_record_ref(client: Client):
     assert "record_ref" in data["error"]
 
 
-@pytest.mark.anyio
 async def test_query_comments_pagination(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -370,7 +364,6 @@ async def test_query_comments_pagination(client: Client):
     assert call_kwargs["page"] == {"skipCount": 20, "maxItems": 10}
 
 
-@pytest.mark.anyio
 async def test_query_comments_api_error(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -387,7 +380,6 @@ async def test_query_comments_api_error(client: Client):
     assert "500" in data["error"]
 
 
-@pytest.mark.anyio
 async def test_query_comments_empty_result(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)

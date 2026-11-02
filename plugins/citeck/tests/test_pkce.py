@@ -132,6 +132,44 @@ class TestExchangeCode(unittest.TestCase):
 
 
 class TestCallbackServer(unittest.TestCase):
+    def setUp(self):
+        env = patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("CITECK_PKCE_CALLBACK_HOST", None)
+        os.environ.pop("CITECK_PKCE_CALLBACK_PORT", None)
+
+    def test_explicit_port_and_guest_bind(self):
+        with patch.dict(os.environ, {
+            "CITECK_PKCE_CALLBACK_HOST": "0.0.0.0",
+            "CITECK_PKCE_CALLBACK_PORT": "19433",
+        }), patch("lib.pkce.http.server.HTTPServer") as http_server:
+            server = CallbackServer()
+            http_server.assert_called_once_with(("0.0.0.0", 19433), unittest.mock.ANY)
+            server.shutdown()
+
+    def test_invalid_config_does_not_bind(self):
+        for name, value in (
+            ("CITECK_PKCE_CALLBACK_PORT", "not-a-port"),
+            ("CITECK_PKCE_CALLBACK_PORT", "-1"),
+            ("CITECK_PKCE_CALLBACK_PORT", "65536"),
+            ("CITECK_PKCE_CALLBACK_HOST", "example.com"),
+        ):
+            with self.subTest(name=name, value=value), patch.dict(os.environ, {name: value}), \
+                    patch("lib.pkce.http.server.HTTPServer") as http_server:
+                with self.assertRaises(AuthError):
+                    CallbackServer()
+                http_server.assert_not_called()
+
+    def test_occupied_port_does_not_fall_back(self):
+        occupied = CallbackServer()
+        try:
+            with patch.dict(os.environ, {"CITECK_PKCE_CALLBACK_PORT": str(occupied.port)}):
+                with self.assertRaisesRegex(AuthError, "No alternative port"):
+                    CallbackServer()
+        finally:
+            occupied.shutdown()
+
     def test_port_assigned(self):
         server = CallbackServer()
         try:
@@ -184,6 +222,34 @@ class TestCallbackServer(unittest.TestCase):
         finally:
             server.shutdown()
 
+    def test_wrong_error_state_does_not_end_attempt(self):
+        server = CallbackServer()
+        server.set_expected_state("expected")
+        responses = []
+
+        def callbacks():
+            for path in (
+                "/callback?error=invalid_scope&state=wrong",
+                "/callback?code=abc&state=%D0%BD%D0%B5%D1%82",
+                "/callback?code=abc&state=expected",
+            ):
+                conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=3)
+                conn.request("GET", path)
+                response = conn.getresponse()
+                responses.append(response.status)
+                response.read()
+                conn.close()
+
+        thread = threading.Thread(target=callbacks)
+        try:
+            thread.start()
+            result = server.wait_for_callback(timeout=5)
+            thread.join(timeout=5)
+            self.assertEqual(responses, [400, 400, 200])
+            self.assertEqual(result["code"], "abc")
+        finally:
+            server.shutdown()
+
     def test_timeout(self):
         server = CallbackServer()
         try:
@@ -195,6 +261,22 @@ class TestCallbackServer(unittest.TestCase):
 
 
 class TestAuthorize(unittest.TestCase):
+    @patch.dict(os.environ, {"CITECK_PKCE_CALLBACK_HOST": "0.0.0.0",
+                             "CITECK_PKCE_CALLBACK_PORT": "19433"})
+    @patch("lib.pkce._exchange_code")
+    @patch("lib.pkce.webbrowser.open")
+    @patch("lib.pkce.CallbackServer")
+    def test_forwarded_redirect_is_loopback(self, mock_server, mock_browser, mock_exchange):
+        mock_server.return_value.port = 19433
+        mock_server.return_value.wait_for_callback.return_value = {"code": "testcode", "state": "expected"}
+        with patch("lib.pkce.generate_state", return_value="expected"):
+            authorize(TOKEN_ENDPOINT, AUTH_ENDPOINT, "nginx")
+        from urllib.parse import urlparse, parse_qs
+        params = parse_qs(urlparse(mock_browser.call_args.args[0]).query)
+        self.assertEqual(params["redirect_uri"], ["http://127.0.0.1:19433/callback"])
+        self.assertEqual(mock_exchange.call_args.args[2], params["redirect_uri"][0])
+        mock_server.return_value.shutdown.assert_called_once()
+
     @patch("lib.pkce.webbrowser.open")
     @patch("lib.pkce._exchange_code")
     def test_full_flow(self, mock_exchange, mock_browser):

@@ -1,6 +1,6 @@
-# Citeck Tools for Claude Code and Codex
+# Citeck Tools for Claude Code, Codex and Pi
 
-Plugin marketplace for local Claude Code and Codex CLI to support development on the [Citeck](https://www.citeck.ru/) platform.
+Plugin marketplace and Pi package for local Claude Code, Codex CLI and Pi to support development on the [Citeck](https://www.citeck.ru/) platform.
 
 ## What you get
 
@@ -51,6 +51,93 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 The MCP server runs on CPython 3.11–3.14: `uv` uses an installed interpreter from this range or downloads one on first start.
+
+### Pi
+
+Requires Pi with the built-in MCP registration API (tested with
+`@earendil-works/pi-coding-agent` **1.4.0**) and `uv` on PATH.
+Install the package from this repository after the Pi changes are published:
+
+```bash
+pi install git:github.com/Citeck/citeck-claude-code-tools
+```
+
+For development, install the working copy instead:
+
+```bash
+pi install /absolute/path/to/citeck-claude-code-tools/plugins/citeck
+```
+
+The full Pi package lives in `plugins/citeck/package.json`, next to the Claude
+Code and Codex manifests; its extension and tests live in `plugins/citeck/pi/`.
+The repository-root `package.json` is only a private Git-install bridge pointing
+to those same resources, because Pi's Git installer does not select subdirectories.
+Installing the repository root locally is also supported; choose either the root
+or the nested package, not both, to avoid duplicate registration.
+
+Restart Pi or run `/reload`. The package loads the existing five skills and
+registers the existing Python MCP server automatically; no manual `mcp.json`
+entry or separate MCP adapter is required. In a trusted project, `pi install -l`
+can be used for project-scoped installation instead of a personal install.
+
+```text
+/skill:citeck-auth
+/skill:citeck-ask-docs Как настроить тип данных?
+/skill:citeck-changes-to-task-md
+/skill:citeck-changes-to-task
+/skill:citeck-test-feature
+```
+
+For PKCE login the assistant uses the package's `citeck_auth` tool: it starts the
+auth process and shows the login link while waiting. Open the link in your host
+browser. On Lima add the forwarding rule below once. The Pi package automatically
+uses callback port **19433** and detects Lima guest-agent markers to select the
+guest bind address; no `export`, shell-profile edits or Python commands are needed. The automatic callback finishes login without copying a callback URL or
+running a Python command yourself. Initial setup accepts an optional `client_id`
+for a custom public OAuth client. Repeat login uses `reauth: true` for the explicit
+existing profile and updates tokens without recreating the profile; it does not
+accept a new URL or client ID. After login, MCP `test_connection` can check only
+the active profile; use the auth skill's explicit-profile script procedure for
+another profile without switching shared defaults.
+The tool terminates its POSIX subprocess group on cancellation, shutdown or a
+five-minute deadline; only one auth attempt runs at a time in this Pi session.
+Do not perform simultaneous token/profile writes from other clients.
+
+Use **`/mcp` inside Pi** to inspect the `citeck` connection. Tools use
+`mcp__citeck__<tool>` names and default to deferred exposure, discoverable with
+`tool_search` or codemode. `pi mcp list` outside the session does not load package
+extensions and cannot validate this registration. A user `mcp.json` entry named
+`citeck` takes precedence; exposure/enabled changes for extension registrations
+through `/mcp` are session-only. Do not install a replacement `/mcp` adapter
+alongside the built-in integration. Missing `uv` or disabled MCP must be resolved
+before calling server tools; skills alone do not establish a connection.
+
+Pi does not enforce the Codex skill invocation policy from `agents/openai.yaml`.
+Issue creation still requires the user's request, complete preview and explicit
+confirmation; exposure is not a permission boundary. Large previews must be
+retrieved and displayed completely before confirmation, or creation stops.
+Browser automation for feature testing is a separate optional dependency, not
+installed by this package.
+
+The supported Pi target is **the entire process running in one POSIX local/VM
+or container environment**, with shared paths for MCP, auth and attachments.
+Host Pi with a separately sandboxed shell, Windows process-tree cancellation,
+and interactive authorization in RPC/print clients are not verified. The package
+never asks for callback codes or tokens in chat. Authorization URLs shown to the
+user may appear in progress/session output; tokens and callback responses must not.
+`CITECK_CONFIG_DIR`, if set, selects the same credential directory for the MCP
+server and PKCE setup; normally both use `~/.citeck/`.
+
+Update and remove using the same source you installed:
+
+```bash
+pi update git:github.com/Citeck/citeck-claude-code-tools
+pi remove git:github.com/Citeck/citeck-claude-code-tools
+```
+
+Local installation, resource discovery, extension lifecycle and relocated MCP
+smoke checks were tested without production access. Live Mac/Lima/Keycloak login
+and remote Git installation of these unpublished changes remain unverified.
 
 ### Codex CLI
 
@@ -141,6 +228,67 @@ The MCP server starts automatically via `uv run` — dependencies are installed 
 After installation:
 - MCP tools are available automatically (in Claude Code as `mcp__plugin_citeck_citeck__<tool_name>`, e.g. `mcp__plugin_citeck_citeck__create_issue`)
 - Skills are available with the `citeck:` prefix (e.g. `/citeck:citeck-auth`)
+
+### Browser authentication inside a Lima VM
+
+PKCE can receive the browser callback automatically from the Mac through Lima
+port forwarding. No callback URL needs to be pasted into the assistant.
+
+**Pi:** the installed package automatically sets port `19433` for both its auth
+tool and MCP server. Inside a detected Lima guest (`/run/lima-guestagent` or
+`/run/lima-boot-done`), it binds the callback listener to `0.0.0.0`; elsewhere it
+uses `127.0.0.1`. The browser redirect always uses `127.0.0.1`. This requires no
+shell environment configuration and does not change global process settings.
+
+**Claude Code / Codex, or custom overrides:** the shared Python library still
+supports explicit settings before starting the client:
+
+```bash
+export CITECK_PKCE_CALLBACK_PORT=19433
+# Only when guest forwarding requires it, inside a trusted VM:
+export CITECK_PKCE_CALLBACK_HOST=0.0.0.0
+```
+
+Explicit environment settings override the Pi package defaults. Custom ports
+must also be reflected in the host-side Lima rule.
+
+Add the Citeck rule before the final deny rule in the Lima configuration:
+
+```yaml
+portForwards:
+  - guestPort: 19432  # Plannotator, if used
+    hostIP: "127.0.0.1"
+    hostPort: 19432
+  - guestPort: 19433  # Citeck OAuth callback
+    hostIP: "127.0.0.1"
+    hostPort: 19433
+  - guestIP: "0.0.0.0"
+    guestIPMustBeZero: false
+    proto: any
+    ignore: true
+```
+
+Apply the VM configuration using your Lima restart workflow. Start authentication
+through the client as usual and open its login link in the **Mac browser**.
+The redirect `http://127.0.0.1:19433/callback` is forwarded to the waiting process
+in the VM. The Keycloak client must allow that loopback redirect; see the
+[Keycloak configuration](plugins/citeck/README.md). The repository's documented
+configuration uses `http://127.0.0.1/*`; verify the actual client accepts the URI.
+
+These settings apply to initial PKCE setup and MCP `reauthenticate`. Outside the
+Pi package, the Python library defaults to `127.0.0.1` and a random available port
+(`0`), preserving existing Claude/Codex behavior. The port must be an integer from 0 to 65535; the bind host must be
+`127.0.0.1` or `0.0.0.0`. With a fixed port, a bind failure stops authentication
+rather than silently choosing an unforwarded port. Only one authentication attempt
+can use the fixed port at a time.
+
+Binding to `0.0.0.0` exposes the listener on guest interfaces; use a trusted VM
+network and firewall, and never publish this port to an untrusted network.
+The Mac forward must stay bound to `127.0.0.1`. If your Lima setup forwards a guest
+loopback listener, explicitly set `CITECK_PKCE_CALLBACK_HOST=127.0.0.1` for the
+narrower bind (Pi otherwise auto-selects the wildcard bind inside Lima).
+This does not provide an automatic host-browser opener: on a headless VM,
+open the link shown by Pi's `citeck_auth` tool in the Mac browser.
 
 ### Update
 
@@ -320,10 +468,17 @@ Note: passwords are stored in plaintext in `credentials.json`. This is acceptabl
 .
 ├── .claude-plugin/
 │   └── marketplace.json            # Marketplace catalog
+├── package.json                    # Pi Git-install bridge (resources only)
 └── plugins/
     └── citeck/                     # Plugin
         ├── .claude-plugin/
         │   └── plugin.json         # Plugin manifest
+        ├── .codex-plugin/
+        │   └── plugin.json         # Codex plugin manifest
+        ├── package.json           # Full Pi package manifest
+        ├── pi/
+        │   ├── citeck.ts          # Pi integration
+        │   └── tests/             # Pi extension tests
         ├── .mcp.json               # MCP server config (uv run)
         ├── pyproject.toml           # Python dependencies (FastMCP)
         ├── servers/
@@ -355,6 +510,19 @@ Note: passwords are stored in plaintext in `credentials.json`. This is acceptabl
 ```bash
 claude --plugin-dir ./plugins/citeck
 ```
+
+### Pi extension tests
+
+Use the installed Pi runtime (no model/API key is needed):
+
+```bash
+# Set this if Pi is not installed under `npm root -g`:
+export PI_INSTALL_DIR=/absolute/path/to/node_modules/@earendil-works/pi-coding-agent
+node --test plugins/citeck/pi/tests/extension.test.mjs
+```
+
+The tests use temporary workspaces, a fake `uv`, synthetic auth data and the real
+Pi resource loader. They do not change your client settings or use your profiles.
 
 ### Running tests
 

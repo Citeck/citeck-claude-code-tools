@@ -31,7 +31,11 @@ allowed-tools: >-
 
 ## Client compatibility
 
-Shared by Claude Code and Codex.
+In Pi, Citeck MCP tools are normally deferred: discover `mcp__citeck__<tool>`
+with `tool_search` or the available codemode discovery before calling them.
+Treat an application result with `ok: false` as failure even without MCP `isError`.
+
+Shared by Claude Code, Codex and Pi. In Pi invoke as `/skill:citeck-test-feature`.
 - Skill directory: `${CLAUDE_SKILL_DIR}`. Claude Code substitutes it; if it appears unexpanded,
   use the absolute directory containing this `SKILL.md`.
 - Quote script paths and run each script command as shown, one per call, without loops or

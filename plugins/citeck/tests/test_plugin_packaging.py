@@ -68,7 +68,8 @@ def test_locked_wheels_cover_supported_pythons():
 
 
 @pytest.mark.asyncio
-async def test_relocated_server_and_resources(tmp_path):
+@pytest.mark.parametrize("use_config_override", [False, True])
+async def test_relocated_server_and_resources(tmp_path, use_config_override):
     installed = tmp_path / "installed plugin with spaces"
     shutil.copytree(PLUGIN, installed, ignore=shutil.ignore_patterns(
         ".venv", "__pycache__", ".pytest_cache"))
@@ -77,10 +78,18 @@ async def test_relocated_server_and_resources(tmp_path):
     server_path = installed / config["args"][-1]
     assert server_path.is_file()
     assert (installed / "skills/citeck-changes-to-task/../_shared/task-description-guide.md").is_file()
+    default_dir = tmp_path / "default-credentials"
+    selected_dir = tmp_path / "override-credentials" if use_config_override else default_dir
+    if use_config_override:
+        credentials_config.save_credentials(
+            "decoy", "http://decoy.invalid", auth_method="basic", config_dir=str(default_dir))
     launcher = (f"import sys, runpy; sys.path.insert(0, {str(installed)!r}); "
-                f"from lib import config; config.DEFAULT_CONFIG_DIR = {str(tmp_path / 'credentials')!r}; "
+                f"from lib import config; config.DEFAULT_CONFIG_DIR = {str(default_dir)!r}; "
                 f"runpy.run_path({str(server_path)!r}, run_name='__main__')")
-    transport = StdioTransport(command=sys.executable, args=["-c", launcher], cwd=str(tmp_path))
+    transport = StdioTransport(
+        command=sys.executable, args=["-c", launcher], cwd=str(tmp_path),
+        env={"CITECK_CONFIG_DIR": str(selected_dir) if use_config_override else ""},
+    )
     async with Client(transport) as client:
         names = {tool.name for tool in await client.list_tools()}
         assert {"ping", "search_docs", "preview_issue", "create_issue", "reauthenticate"} <= names
@@ -91,10 +100,10 @@ async def test_relocated_server_and_resources(tmp_path):
 
         credentials_config.save_credentials(
             "fixture", "http://fixture.invalid", username="test", password="test",
-            auth_method="basic", config_dir=str(tmp_path / "credentials"))
+            auth_method="basic", config_dir=str(selected_dir))
         refreshed = (await client.call_tool("list_profiles", {})).data
         assert refreshed["active"] == "fixture"
         assert refreshed["profiles"][0]["url"] == "http://fixture.invalid"
         assert "password" not in refreshed["profiles"][0]
-        assert ((tmp_path / "credentials/credentials.json").stat().st_mode & 0o777) == 0o600
-        assert ((tmp_path / "credentials").stat().st_mode & 0o777) == 0o700
+        assert ((selected_dir / "credentials.json").stat().st_mode & 0o777) == 0o600
+        assert (selected_dir.stat().st_mode & 0o777) == 0o700

@@ -20,9 +20,23 @@ allowed-tools: >-
   mcp__plugin_citeck_citeck__create_issue
 ---
 
+## Pi safety and complete preview
+
+Only initiate issue creation when the user requests it; Pi does not apply the
+Codex `agents/openai.yaml` invocation policy. Always retain explicit preview and
+confirmation. Pi may truncate large MCP text results. If the preview is truncated,
+obtain the full `text` from structured content via codemode or read the full saved
+result in bounded parts. Display all preview text in order, without paraphrasing,
+before asking for confirmation. If full retrieval/display is unavailable, stop;
+never create an issue from an incomplete preview. Do not treat `ok: false` as success.
+
 ## Client compatibility
 
-Shared by Claude Code and Codex.
+In Pi, Citeck MCP tools are normally deferred: discover `mcp__citeck__<tool>`
+with `tool_search` or the available codemode discovery before calling them.
+Treat an application result with `ok: false` as failure even without MCP `isError`.
+
+Shared by Claude Code, Codex and Pi. In Pi invoke as `/skill:citeck-changes-to-task`.
 - Skill directory: `${CLAUDE_SKILL_DIR}`. Claude Code substitutes it; if it appears unexpanded,
   use the absolute directory containing this `SKILL.md`.
 - MCP tools are named without the client prefix.

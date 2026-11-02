@@ -6,8 +6,10 @@ No password is ever stored — only tokens.
 """
 import base64
 import hashlib
+import html
 import http.server
 import json
+import os
 import secrets
 import sys
 import time
@@ -119,11 +121,21 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
             return
 
         params = urllib.parse.parse_qs(parsed.query)
+        expected_state = getattr(self.server, "expected_state", None)
+        if expected_state is not None and (
+            len(params.get("state", [])) != 1
+            or not secrets.compare_digest(params["state"][0].encode("utf-8"), expected_state.encode("utf-8"))
+            or len(params.get("code", [])) > 1
+            or len(params.get("error", [])) > 1
+            or ("code" in params and "error" in params)
+        ):
+            self._send_html(400, ERROR_HTML.format(error="Invalid authorization response"))
+            return
         error = params.get("error", [None])[0]
         if error:
             error_desc = params.get("error_description", [error])[0]
             self.server.callback_result = {"error": error_desc, "error_code": error}
-            self._send_html(400, ERROR_HTML.format(error=error_desc))
+            self._send_html(400, ERROR_HTML.format(error=html.escape(error_desc)))
             return
 
         code = params.get("code", [None])[0]
@@ -150,11 +162,40 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
 
 
 class CallbackServer:
-    """Local HTTP server that waits for the OAuth callback."""
+    """HTTP callback receiver; optionally use a fixed port for VM forwarding.
+
+    CITECK_PKCE_CALLBACK_PORT defaults to 0 (an available ephemeral port).
+    CITECK_PKCE_CALLBACK_HOST defaults to loopback; 0.0.0.0 is opt-in for
+    trusted VM networks. Neither setting changes the loopback redirect host.
+    """
 
     def __init__(self):
-        self._server = http.server.HTTPServer(("127.0.0.1", 0), _CallbackHandler)
+        # Fixed ports allow host-to-VM forwarding. The advertised redirect always
+        # remains loopback on the browser's machine, independent of the bind host.
+        host = os.environ.get("CITECK_PKCE_CALLBACK_HOST", "127.0.0.1")
+        if host not in ("127.0.0.1", "0.0.0.0"):
+            raise AuthError(
+                "CITECK_PKCE_CALLBACK_HOST must be 127.0.0.1 or 0.0.0.0"
+            )
+        raw_port = os.environ.get("CITECK_PKCE_CALLBACK_PORT", "0")
+        try:
+            port = int(raw_port)
+        except ValueError:
+            raise AuthError("CITECK_PKCE_CALLBACK_PORT must be an integer from 0 to 65535") from None
+        if not 0 <= port <= 65535:
+            raise AuthError("CITECK_PKCE_CALLBACK_PORT must be an integer from 0 to 65535")
+        try:
+            self._server = http.server.HTTPServer((host, port), _CallbackHandler)
+        except OSError as exc:
+            raise AuthError(
+                f"Cannot bind PKCE callback on {host}:{port}. "
+                "Check that the address is available and the port is not in use. "
+                "No alternative port was selected."
+            ) from exc
         self._server.callback_result = None
+
+    def set_expected_state(self, state):
+        self._server.expected_state = state
 
     @property
     def port(self):
@@ -223,6 +264,7 @@ def _authorize_once(token_endpoint, auth_endpoint, client_id, timeout, scope):
     state = generate_state()
 
     server = CallbackServer()
+    server.set_expected_state(state)
     try:
         redirect_uri = f"http://127.0.0.1:{server.port}{CALLBACK_PATH}"
         auth_url = _build_authorization_url(
@@ -230,8 +272,12 @@ def _authorize_once(token_endpoint, auth_endpoint, client_id, timeout, scope):
             scope=scope,
         )
 
-        print(f"\nOpen this URL in your browser to log in:\n\n  {auth_url}\n",
-              file=sys.stderr)
+        if os.environ.get("CITECK_PKCE_PROGRESS_JSON") == "1":
+            print(json.dumps({"event": "authorization_url", "url": auth_url}),
+                  file=sys.stderr, flush=True)
+        else:
+            print(f"\nOpen this URL in your browser to log in:\n\n  {auth_url}\n",
+                  file=sys.stderr, flush=True)
         try:
             webbrowser.open(auth_url)
         except Exception:
@@ -254,10 +300,6 @@ def _authorize_once(token_endpoint, auth_endpoint, client_id, timeout, scope):
             token_endpoint, result["code"], redirect_uri, client_id, code_verifier,
         )
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace") if hasattr(e, "read") else ""
-        raise AuthError(
-            f"Token exchange failed: HTTP {e.code} {e.reason}"
-            + (f" — {body}" if body else "")
-        ) from e
+        raise AuthError(f"Token exchange failed: HTTP {e.code}") from e
     except KeyError as e:
         raise AuthError(f"Unexpected token response: missing field {e}") from e

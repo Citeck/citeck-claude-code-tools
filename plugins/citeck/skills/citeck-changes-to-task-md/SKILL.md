@@ -14,7 +14,11 @@ allowed-tools: >-
 
 ## Client compatibility
 
-Shared by Claude Code and Codex.
+In Pi, Citeck MCP tools are normally deferred: discover `mcp__citeck__<tool>`
+with `tool_search` or the available codemode discovery before calling them.
+Treat an application result with `ok: false` as failure even without MCP `isError`.
+
+Shared by Claude Code, Codex and Pi. In Pi invoke as `/skill:citeck-changes-to-task-md`.
 - Skill directory: `${CLAUDE_SKILL_DIR}`. Claude Code substitutes it; if it appears unexpanded,
   use the absolute directory containing this `SKILL.md`.
 - User-question mechanism: `AskUserQuestion` in Claude Code; elsewhere the client's question

@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "pi": {
+    "extensions": ["./plugins/citeck/pi/citeck.ts"],
+    "skills": ["./plugins/citeck/skills"]
+  }
+}

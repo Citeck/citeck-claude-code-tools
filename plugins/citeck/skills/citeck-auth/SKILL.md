@@ -16,9 +16,30 @@ allowed-tools: >-
   mcp__plugin_citeck_citeck__reauthenticate
 ---
 
+## Pi authentication
+
+When the Pi package provides `citeck_auth`, use that tool instead of launching
+scripts through `bash` or calling MCP `reauthenticate`. For initial setup pass
+an explicit `profile` and the user-confirmed Citeck `url`; include `client_id` if
+the user selected a custom public OAuth client. For an existing PKCE
+profile pass `profile` and `reauth: true`, without `url` or `client_id`; do not recreate the
+profile. The tool shows a login URL while waiting for automatic callback.
+The user opens it in their host browser; Lima must forward the configured port.
+Never ask the user to paste a callback, password or tokens into chat.
+After success use `list_profiles` to verify the selected profile's URL. Follow
+“Test Connection” below: MCP `test_connection` takes no arguments and checks only
+the active profile. For a non-active profile use the script with explicit
+`--profile`, without changing shared defaults. Respect cancellation and stop on failure. Never blindly retry a mutation
+whose previous outcome is unknown. If `citeck_auth` is unavailable, explain that
+the Pi package/extension must be enabled; do not pretend authentication occurred.
+
 ## Client compatibility
 
-Shared by Claude Code and Codex.
+In Pi, Citeck MCP tools are normally deferred: discover `mcp__citeck__<tool>`
+with `tool_search` or the available codemode discovery before calling them.
+Treat an application result with `ok: false` as failure even without MCP `isError`.
+
+Shared by Claude Code, Codex and Pi. In Pi invoke as `/skill:citeck-auth`.
 - Skill directory: `${CLAUDE_SKILL_DIR}`. Claude Code substitutes it; if it appears unexpanded,
   use the absolute directory containing this `SKILL.md`.
 - Quote script paths and run each script command as shown, one per call, without loops or

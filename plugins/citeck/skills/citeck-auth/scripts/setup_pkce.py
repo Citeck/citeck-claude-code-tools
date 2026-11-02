@@ -17,7 +17,9 @@ def main():
         description="Authenticate to Citeck ECOS via browser (OIDC PKCE)")
     parser.add_argument("--profile", default="default",
                         help="Profile name (default: default)")
-    parser.add_argument("--url", required=True,
+    parser.add_argument("--reauth", action="store_true",
+                        help="Refresh tokens of an existing PKCE profile without changing its settings")
+    parser.add_argument("--url", required=False,
                         help="Citeck ECOS base URL")
     parser.add_argument("--client-id", default=None,
                         help="OIDC public client ID (default: CITECK_CLIENT_ID env or 'citeck-ai-agent')")
@@ -25,6 +27,33 @@ def main():
                         help="Seconds to wait for browser callback (default: 120)")
     args = parser.parse_args()
 
+    if args.reauth:
+        if args.url or args.client_id:
+            parser.error("--reauth cannot be combined with --url or --client-id")
+        config_dir = os.environ.get("CITECK_CONFIG_DIR")
+        try:
+            creds = config.get_credentials(args.profile, config_dir)
+            if not creds or creds.get("auth_method") != "oidc-pkce":
+                raise auth.AuthError("Reauthentication requires an existing PKCE profile")
+            endpoints = None
+            if not creds.get("token_endpoint") or not creds.get("authorization_endpoint"):
+                info = auth.discover_eis(creds["url"])
+                endpoints = auth.discover_oidc_endpoints(info["eis_id"], info["realm"])
+                if not endpoints:
+                    raise auth.AuthError("Could not discover OIDC endpoints")
+            tokens = pkce.authorize(
+                (endpoints or creds)["token_endpoint"],
+                (endpoints or creds)["authorization_endpoint"],
+                creds.get("client_id") or "citeck-ai-agent", timeout=args.timeout,
+            )
+            auth._save_cache(tokens, args.profile, config_dir)
+            print(json.dumps({"status": "ok", "profile": args.profile, "url": creds["url"]}))
+        except (auth.AuthError, config.ConfigError, OSError) as exc:
+            print(json.dumps({"status": "error", "error": str(exc)}), file=sys.stderr)
+            sys.exit(1)
+        return
+    if not args.url:
+        parser.error("--url is required unless --reauth is used")
     url = args.url.rstrip("/")
     client_id = args.client_id or os.environ.get("CITECK_CLIENT_ID", "citeck-ai-agent")
     config_dir = os.environ.get("CITECK_CONFIG_DIR")

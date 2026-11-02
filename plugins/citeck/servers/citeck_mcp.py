@@ -91,7 +91,9 @@ mcp = FastMCP(
         "Multiple environments are supported via profiles. Use list_profiles to see "
         "configured environments and set_active_profile to switch between them — "
         "do NOT ask the user to invoke citeck-auth just to switch.\n\n"
-        "If a tool fails with a session-expired error, call the reauthenticate tool "
+        "In Pi, when citeck_auth is available, use it with the failed operation's explicit "
+        "profile and reauth=true for expired PKCE sessions; it shows the login link. "
+        "Otherwise, if a tool fails with a session-expired error, call the reauthenticate tool "
         "(it opens the user's browser for login and blocks until complete), then "
         "retry the original operation — do NOT send the user to citeck-auth.\n\n"
         "Specialized profiles can route specific tool groups to different environments:\n"
@@ -108,7 +110,7 @@ mcp = FastMCP(
 
 def _get_config_dir() -> str | None:
     """Return config directory. Overridable in tests."""
-    return None
+    return os.environ.get("CITECK_CONFIG_DIR") or None
 
 
 @mcp.tool

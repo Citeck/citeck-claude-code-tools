@@ -46,13 +46,11 @@ def _mock_urlopen_response(data: bytes, content_type: str = "image/png"):
     return mock_resp
 
 
-@pytest.mark.anyio
 async def test_download_attachment_tool_exists(client: Client):
     tools = await client.list_tools()
     assert "download_attachment" in [t.name for t in tools]
 
 
-@pytest.mark.anyio
 async def test_download_success(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -80,7 +78,6 @@ async def test_download_success(client: Client):
     os.unlink(data["path"])
 
 
-@pytest.mark.anyio
 async def test_download_relative_url_resolved(client: Client):
     """Relative URL is resolved against credentials base URL."""
     config_dir = tempfile.mkdtemp()
@@ -105,7 +102,6 @@ async def test_download_relative_url_resolved(client: Client):
         os.unlink(path)
 
 
-@pytest.mark.anyio
 async def test_download_absolute_url_kept(client: Client):
     """Absolute URL is used as-is."""
     config_dir = tempfile.mkdtemp()
@@ -128,7 +124,6 @@ async def test_download_absolute_url_kept(client: Client):
         os.unlink(result.data["path"])
 
 
-@pytest.mark.anyio
 async def test_download_empty_url(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -141,7 +136,6 @@ async def test_download_empty_url(client: Client):
     assert "url" in data["error"]
 
 
-@pytest.mark.anyio
 async def test_download_no_credentials(client: Client):
     config_dir = tempfile.mkdtemp()
 
@@ -155,7 +149,6 @@ async def test_download_no_credentials(client: Client):
     assert "No credentials" in data["error"]
 
 
-@pytest.mark.anyio
 async def test_download_http_404(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -173,7 +166,6 @@ async def test_download_http_404(client: Client):
     assert "404" in data["error"]
 
 
-@pytest.mark.anyio
 async def test_download_connection_error(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -191,7 +183,6 @@ async def test_download_connection_error(client: Client):
     assert "Connection error" in data["error"]
 
 
-@pytest.mark.anyio
 async def test_download_auth_error(client: Client):
     config_dir = tempfile.mkdtemp()
     _setup_credentials(config_dir)
@@ -208,7 +199,6 @@ async def test_download_auth_error(client: Client):
     assert "Token expired" in data["error"]
 
 
-@pytest.mark.anyio
 async def test_download_jpeg_extension(client: Client):
     """JPEG content type gets .jpg extension, not .jpe."""
     config_dir = tempfile.mkdtemp()

@@ -1,0 +1,16 @@
+{
+  "name": "citeck-pi-tools",
+  "version": "4.1.0",
+  "private": true,
+  "description": "Citeck MCP tools and shared skills for Pi, Claude Code and Codex",
+  "keywords": ["pi-package"],
+  "type": "module",
+  "pi": {
+    "extensions": ["./pi/citeck.ts"],
+    "skills": ["./skills"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}
