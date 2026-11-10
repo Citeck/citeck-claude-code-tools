@@ -36,7 +36,8 @@ MCP Server (FastMCP, persistent process)
       search_issues, preview_issue, create_issue, update_issue,
       preview_comment, add_comment, query_sprints,
       query_components, query_tags, query_releases, query_comments,
-      download_attachment, search_docs
+      download_attachment, search_docs,
+      bpmn_validate, bpmn_layout, deploy_app (application generation, stage-1 prototype)
   └── imports shared modules from lib/
 Skills (user-invocable via /citeck:<name>)
   └── citeck-auth: PKCE browser flow (runs Python scripts)
@@ -44,6 +45,7 @@ Skills (user-invocable via /citeck:<name>)
   └── citeck-changes-to-task: workflow orchestration (uses MCP tools)
   └── citeck-changes-to-task-md: generates task.md from git changes
   └── citeck-test-feature: feature acceptance testing (MCP + browser tools + HTTP)
+  └── citeck-app-from-spec: application from a spec — files, deploy_app, loop on the stand
 ```
 
 ### MCP Server (`servers/citeck_mcp.py`)
@@ -73,6 +75,8 @@ Skills under `skills/`:
 - `citeck-changes-to-task` — workflow skill using MCP tools
 - `citeck-changes-to-task-md` — generates task.md, uses git and file writing (no MCP)
 - `citeck-test-feature` — guide + scaffolder for feature acceptance testing; `references/` (durable methodology), `examples/` (profile), `templates/` (generated plan), `scripts/` (fixture generators). Uses Citeck MCP + available Playwright MCP or browser tools + scripted HTTP
+
+- `citeck-app-from-spec` — stage-1 prototype (plan `docs/plans/2026-11-10-app-from-spec-stage1.md`): agent writes `ecos-apps` files, `deploy_app` uploads them into one workspace. `references/schemas/` is copied from citeck-ai by `scripts/sync_schemas.sh` — never edit by hand. Guards in `lib/guards.py` (`CITECK_ALLOWED_SERVERS`, `CITECK_GENERATION_MODE`) are conveniences, not a security boundary
 
 Each skill may also have `agents/openai.yaml` (Codex display name and invocation policy).
 

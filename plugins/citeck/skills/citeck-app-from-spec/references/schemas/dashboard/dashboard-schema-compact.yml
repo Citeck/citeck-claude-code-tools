@@ -1,0 +1,171 @@
+# Compact reference of the Citeck record dashboard (uiserv/dashboard), in the INTERMEDIATE
+# REPRESENTATION the model writes.
+#
+# ⚠️ You do NOT write the platform dashboard format. The stored artifact is a widget REGISTRY plus
+# per-device layouts that reference widgets by generated id (`config.v2.widgets` +
+# `config.v2.desktop` + `config.v2.mobile`); authoring that by hand means inventing dozens of
+# UUIDs and keeping two id spaces in sync, and one wrong id silently renders an empty tab.
+# So the split is: the MODEL writes the tabs and the widgets in them, and CODE compiles that into
+# the platform format with deterministic ids and a mobile layout derived from the desktop one.
+#
+# There is no ecos-idea-plugin schema for the dashboard; this reference was assembled from the
+# real artifacts of the seven business applications on disk plus `ecos-uiserv`
+# `domain/dashdoard/dto/DashboardDto.kt` and `ecos-ui` `services/dashboard.jsx`.
+
+type: object
+required:
+  - id
+  - typeRef
+  - tabs
+properties:
+
+  id:
+    type: string
+    description: >-
+      Dashboard id, kebab-case. Convention: `<typeLocalId>-dashboard`
+      (type `purchase-request` → `purchase-request-dashboard`).
+
+  name:
+    description: Dashboard title, i18n object.
+    type: object
+    properties:
+      ru: { type: string }
+      en: { type: string }
+
+  typeRef:
+    type: string
+    description: >-
+      Ref of the data type whose RECORD CARD this dashboard is, e.g.
+      `emodel/type@purchase-request`. Copy it EXACTLY from the input; never invent it.
+
+  tabs:
+    type: array
+    description: Tabs of the card, left to right. At least one.
+    items:
+      type: object
+      required: [label, columns]
+      properties:
+        label:
+          description: Tab caption, i18n object.
+          type: object
+          properties:
+            ru: { type: string }
+            en: { type: string }
+        layout:
+          type: string
+          enum: ["1-column", "2-columns-big-small", "2-columns-small-big"]
+          default: "1-column"
+          description: >-
+            Column layout. `2-columns-big-small` is the usual record card: content on the left,
+            a narrow side column on the right.
+        columns:
+          type: array
+          description: >-
+            One entry per column of the layout (1 for `1-column`, 2 for the two-column layouts).
+          items:
+            type: object
+            required: [widgets]
+            properties:
+              width:
+                type: string
+                description: >-
+                  CSS width of the NARROW column, `25%` by convention. Set it on the small column
+                  of a two-column layout; omit on the big one and on `1-column`.
+              widgets:
+                type: array
+                items:
+                  type: object
+                  required: [type]
+                  properties:
+                    type:
+                      type: string
+                      description: Widget name from the catalogue below.
+                    documentTypes:
+                      type: array
+                      description: "`documents` widget only — see the documents_widget section."
+                      items: { type: string }
+                    canUpload:
+                      type: boolean
+                      default: true
+                      description: "`documents` widget only: may the user upload files."
+                    journalId:
+                      type: string
+                      description: "`journal` widget only: id of an EXISTING journal to embed."
+
+# ---------------------------------------------------------------------------
+# Widget catalogue — these names and no others
+# ---------------------------------------------------------------------------
+#
+# properties        Record attributes (the card's main block). Almost every card has one.
+# comments          Comment thread on the record.
+# doc-status        Current status and the status history line.
+# record-actions    The action buttons available on the record.
+# doc-associations  Links to other records (associations).
+# doc-preview       Preview of the record's content file (PDF/image). Only for types that HAVE
+#                   a CONTENT attribute — a preview over a type with no content is an empty tab.
+# events-history    Audit trail of the record.
+# versions-journal  Versions of the record's content file.
+# tasks             «Мои задачи»: the viewing user's tasks on this record, each with its task form and
+#                   outcome buttons — the widget a business process is driven through from the card.
+# current-tasks     «Все задачи»: every active task of the record with its performers; no outcome buttons.
+# activities        Activity feed (calls, meetings, notes).
+# documents         Child documents of the record — see documents_widget below.
+# journal           An embedded journal (list of other records). Needs `journalId`.
+# user-profile      Profile block; only for person-shaped types.
+# barcode           Barcode of the record.
+# stages            Process stages of the record.
+# charts            One chart; several independent charts can share a tab or occupy different tabs.
+#
+# ---------------------------------------------------------------------------
+# documents_widget — the documents attached to a record
+# ---------------------------------------------------------------------------
+#
+# The `documents` widget shows the CHILD DOCUMENTS of the record, grouped by document type, and
+# lets the user upload new ones. Three things must line up, and all three are checked before
+# deployment:
+#
+#   1. `documentTypes` names REAL data types. Every entry is a full ref (`emodel/type@…`) of a
+#      type that already exists. A widget pointing at a type that does not exist renders an
+#      always-empty group and cannot be repaired from the UI — so code removes a ref nobody backs
+#      (and the card says so), and refuses a card that would lose every tab that way.
+#   2. Those types are DOCUMENT types — descendants of `emodel/type@document`. A document type
+#      carries `name` and a CONTENT attribute; an ordinary business type in this list means the
+#      user will be asked to «upload» a record.
+#   3. The HOST type (the dashboard's own `typeRef`) carries the `has-documents` aspect
+#      (`emodel/aspect@has-documents`), which is what gives the record its `documents` child
+#      association. CODE adds the aspect on deploy when it is missing — do not ask the user to
+#      do it, and do not put the aspect into the dashboard.
+#
+# When the user asks for documents on a card but names no document types, use the platform's
+# generic ones — `emodel/type@attachment` (вложение) and `emodel/type@scan-document` (скан) —
+# rather than inventing type ids. If the user names a KIND of document the platform has no type
+# for («акт», «спецификация»), never write a ref for it: that type has to be created first (a data
+# type with parent `emodel/type@document`); the rules of the prompt say how the card goes on without it.
+#
+# ---------------------------------------------------------------------------
+# Card conventions
+# ---------------------------------------------------------------------------
+#
+# - The first tab is «Основное» / «General»: `properties` in the big column; `doc-status`,
+#   `record-actions` and `current-tasks` in the narrow one.
+# - A type with a business process gets `tasks` at the top of the big column of the first tab
+#   (after `stages` when the card has it). Code adds it when the plan builds a process over the
+#   type and the card has none.
+# - Give `documents`, `doc-preview` and `events-history` tabs of their own — each is full-width
+#   content and crowds a shared tab.
+# - 2–4 tabs. A card with seven tabs is a card nobody reads.
+# - Do not put the same widget on two tabs.
+
+# charts_widget
+# Each charts widget requires title (MLText), graphicTypeId (vertical-bar, doughnut, line, funnel),
+# groupBy ([{attribute, step?}]), and aggregate (count, sum(attribute), avg(attribute)).
+# A date step is hour/day/week/month/quarter/year; only DATE/DATETIME fields support it.
+# A date grouping may carry ONE dateRange limiting the records shown: "$TODAY/P90D" (next 90 days),
+# "P30D/P60D" (30 to 60 days ahead), "-P30D/$TODAY" (last 30 days). Calendar intervals plus that one
+# range is all the designer can do with dates: buckets like 30/60/90 days in ONE chart are impossible —
+# make one chart per interval, and never let a title promise what the chart does not apply.
+# sum/avg require a NUMBER attribute. All attributes must exist in the supplied type model.
+# Do NOT set journalId/typeRef on charts: code binds them. Keep sourceWidgetId from an existing
+# chart when editing it; omit on new charts. It refers to stored settings, including preset filters.
+# A dashboard may contain one or multiple charts, each with its own title, grouping and aggregate.
+# The no-duplicate-widget convention does not prohibit several charts.

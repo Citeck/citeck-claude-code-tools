@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Citeck Record Permission Settings",
+  "description": "Structural schema of a record permission-settings artifact (emodel/permission-settings). Hand-authored for COREDEV-420 P1 task 10: unlike the journal, the action and the type permissions, this kind ships no schema in ecos-idea-plugin. Field set taken from PermissionSettingsDto (ecos-model) and the plugin template model/permission-settings/template.yml.ft.",
+  "type": "object",
+  "required": [
+    "id",
+    "recordRef",
+    "settings"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique id of the settings record",
+      "pattern": "^[\\w$:.-]+$"
+    },
+    "recordRef": {
+      "type": "string",
+      "description": "The record these permissions are granted ON, e.g. eproc/bpmn-def@my-process",
+      "pattern": "^[\\w$/.-]+@[\\w$/.:-]+$"
+    },
+    "inherit": {
+      "type": "boolean",
+      "description": "Whether the record also inherits the permissions computed by its type"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Settings version. The platform IGNORES an update whose version is not greater than the stored one, so it is bumped by the deploy, not by the model."
+    },
+    "settings": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Grants. Each entry gives the listed permissions to the listed authorities/roles.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Refs of permission definitions, e.g. emodel/permission-def@bpmn-process-instance-run",
+            "items": {
+              "type": "string",
+              "pattern": "^[\\w$/.-]+@[\\w$/.-]+$"
+            }
+          },
+          "authorities": {
+            "type": "array",
+            "description": "Group or user names, e.g. GROUP_EVERYONE, GROUP_bp-manager, ivanov",
+            "items": {
+              "type": "string"
+            }
+          },
+          "roles": {
+            "type": "array",
+            "description": "Role ids of the record's type",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "permissions"
+        ]
+      }
+    }
+  }
+}

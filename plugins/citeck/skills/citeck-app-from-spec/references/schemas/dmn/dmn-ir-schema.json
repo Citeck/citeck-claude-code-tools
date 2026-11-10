@@ -1,0 +1,184 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Citeck DMN decision-table IR",
+  "description": "Intermediate representation of a DMN decision table (eproc/dmn-def). NOT the platform format: DmnIrCompiler compiles this into the ECOS DMN XML. Written by the LLM, read by the validator.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "inputs",
+    "outputs",
+    "rules"
+  ],
+  "definitions": {
+    "mlText": {
+      "type": "object",
+      "description": "Multilingual text",
+      "minProperties": 1,
+      "properties": {
+        "ru": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      }
+    },
+    "columnType": {
+      "type": "string",
+      "description": "FEEL type of the column",
+      "enum": [
+        "string",
+        "integer",
+        "long",
+        "double",
+        "boolean",
+        "date"
+      ]
+    },
+    "cellValue": {
+      "description": "One cell of a rule. A plain value (quoted by the compiler per column type), a number, a boolean, or a raw FEEL expression prefixed with '='.",
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "null"
+      ]
+    }
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Decision table id, kebab-case",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+    },
+    "name": {
+      "$ref": "#/definitions/mlText"
+    },
+    "decisionName": {
+      "type": "string",
+      "description": "Technical name of the decision element; defaults to the Russian name"
+    },
+    "decisionId": {
+      "type": "string",
+      "description": "Id of the decision element of an EXISTING table. Carried over verbatim on a modification and never invented: processes bind to a decision by this id."
+    },
+    "decisionTableId": {
+      "type": "string",
+      "description": "Id of the decisionTable element of an EXISTING table. Carried over verbatim on a modification, never invented."
+    },
+    "typeRef": {
+      "type": "string",
+      "description": "Ref of the data type whose records feed the input variables, e.g. emodel/type@contract"
+    },
+    "hitPolicy": {
+      "type": "string",
+      "description": "How several matching rules are combined",
+      "enum": [
+        "UNIQUE",
+        "FIRST",
+        "PRIORITY",
+        "ANY",
+        "COLLECT",
+        "RULE ORDER",
+        "OUTPUT ORDER"
+      ]
+    },
+    "aggregation": {
+      "type": "string",
+      "description": "COLLECT aggregation; only valid with hitPolicy COLLECT",
+      "enum": [
+        "SUM",
+        "MIN",
+        "MAX",
+        "COUNT"
+      ]
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Input columns, in table order",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "variable"
+        ],
+        "properties": {
+          "variable": {
+            "type": "string",
+            "description": "DMN input variable name",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "label": {
+            "type": "string",
+            "description": "Column header shown in the modeller"
+          },
+          "type": {
+            "$ref": "#/definitions/columnType"
+          },
+          "sourceAtt": {
+            "type": "string",
+            "description": "Record attribute feeding the variable (ecos:model); defaults to the variable name"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "description": "Output columns, in table order",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Result variable the process reads",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/definitions/columnType"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "Table rows: one condition per input column, one result per output column",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "when",
+          "then"
+        ],
+        "properties": {
+          "when": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/cellValue"
+            }
+          },
+          "then": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/cellValue"
+            }
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

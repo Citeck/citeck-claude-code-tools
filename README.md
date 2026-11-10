@@ -352,6 +352,9 @@ The plugin provides an MCP server `citeck` with the following tools. Each client
 | `set_records_profile` | Set the profile used for plain `records_query` / `records_mutate` |
 | `list_profiles` | List configured Citeck profiles with non-sensitive metadata |
 | `set_active_profile` | Switch the active profile (used as fallback by every tool group) |
+| `bpmn_validate` | Validate a BPMN file with the platform (`VALIDATE_GENERAL_BPMN`), nothing is saved |
+| `bpmn_layout` | Lay out a BPMN file's diagram with the platform and write it back to the file |
+| `deploy_app` | Upload an `ecos-apps` application directory into one workspace, wait for this upload and report every changed artifact with the platform error text |
 
 ### Skills
 
@@ -361,6 +364,7 @@ The plugin provides an MCP server `citeck` with the following tools. Each client
 | [citeck-changes-to-task](plugins/citeck/skills/citeck-changes-to-task/SKILL.md) | Create a Citeck Project Tracker issue from current git changes |
 | [citeck-changes-to-task-md](plugins/citeck/skills/citeck-changes-to-task-md/SKILL.md) | Generate task.md file with structured task description from git changes |
 | [citeck-ask-docs](plugins/citeck/skills/citeck-ask-docs/SKILL.md) | Ask a question about Citeck — semantic search over citeck-docs with cited answer |
+| [citeck-app-from-spec](plugins/citeck/skills/citeck-app-from-spec/SKILL.md) | Build an application from a spec: plan, artifact files, platform BPMN checks, deploy into one workspace, check-and-fix loop on the stand, report (stage-1 prototype) |
 | [citeck-test-feature](plugins/citeck/skills/citeck-test-feature/SKILL.md) | Design, audit and run smoke, impact or full Citeck regression with code-surface inventory, terminal E2E traceability, validated manifests and optimized tier/cluster execution |
 
 ### citeck-auth

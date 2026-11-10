@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Citeck ECOS artifact patch (eapps/artifact-patch)",
+  "type": "object",
+  "required": ["id", "name", "target", "type", "config"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Record id of the patch, kebab-case, says what it does: add-contracts-in-left-menu"
+    },
+    "name": {
+      "type": "object",
+      "description": "i18n name shown in the platform artifact list",
+      "properties": {
+        "ru": { "type": "string" },
+        "en": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "target": {
+      "type": "string",
+      "description": "ecos-apps artifact ref of the artifact being patched: <artifactType>$<localId>",
+      "pattern": "^[a-z0-9-]+/[a-z0-9-]+\\$[^$@]+$"
+    },
+    "workspace": {
+      "type": "string",
+      "description": "Workspace id of the patched artifact; empty for a global artifact"
+    },
+    "order": {
+      "type": "number",
+      "description": "Application order among the patches of one target; lower runs first"
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Disabled patches are ignored by the platform and revert their patched revision"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["json"],
+      "description": "The only patch type the platform applies to artifact content"
+    },
+    "config": {
+      "type": "object",
+      "required": ["operations"],
+      "properties": {
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["op", "path"],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": ["add", "set", "remove", "rename-key"]
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^\\$[.\\[]",
+                "description": "JsonPath into the target's content, always starting with $. or $[ : $.subMenu.left.items, $.actions, $.associations[?(@.id == 'assoc:x')].journals"
+              },
+              "value": {
+                "description": "Value for add/set; an array value is appended element-wise by add"
+              },
+              "idx": {
+                "type": "integer",
+                "description": "Insert position for add; appended at the end when omitted"
+              },
+              "key": {
+                "type": "string",
+                "description": "For set: the key to set inside the object(s) the path resolves to"
+              },
+              "oldKey": { "type": "string" },
+              "newKey": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

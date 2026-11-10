@@ -1,0 +1,131 @@
+# Compact reference of the DMN decision-table INTERMEDIATE REPRESENTATION.
+#
+# ⚠️ This is NOT the platform artifact format. A DMN table is stored as XML (`eproc/dmn-def`,
+# `definition`), and that XML carries namespaces, element ids, a DMNDI diagram block and FEEL
+# quoting rules. None of that is written here: the assistant writes THIS object and
+# `DmnIrCompiler` compiles the XML from it deterministically — the same split as the record card.
+#
+# Provenance: ecos-process `DmnDefRecords` / `DmnDefinitionsConverter` (the `ecos:` envelope) and
+# the DMN 1.3 decision-table model; the four real tables in the business applications on disk were
+# used as the reference shape.
+
+type: object
+required:
+  - id
+  - name
+  - inputs
+  - outputs
+  - rules
+properties:
+
+  id:
+    type: string
+    description: >-
+      Decision table id, kebab-case, latin letters/digits/hyphen only. Convention:
+      `<what-it-decides>` — `contract-approval-stages`, `vacation-approver`.
+      On a MODIFICATION keep the existing id: it addresses the record being updated.
+
+  name:
+    description: Table title, i18n object. `ru` is mandatory.
+    type: object
+    properties:
+      ru: { type: string }
+      en: { type: string }
+
+  decisionId:
+    type: string
+    description: >-
+      Present ONLY when an existing table was handed to you. Copy it back UNCHANGED and never
+      invent one: processes bind to a decision table by this id, so renaming it silently breaks
+      every business-rule task that uses the table. The same rule applies to `decisionTableId`.
+
+  decisionTableId:
+    type: string
+    description: Present only for an existing table — copy back unchanged, see `decisionId`.
+
+  typeRef:
+    type: string
+    description: >-
+      Ref of the data type whose records feed this table, e.g. `emodel/type@contract`.
+      Copy it EXACTLY from the input; never invent it.
+
+  hitPolicy:
+    type: string
+    enum: [UNIQUE, FIRST, PRIORITY, ANY, COLLECT, RULE ORDER, OUTPUT ORDER]
+    description: >-
+      How several matching rules are combined. UNIQUE (the default) — at most ONE rule may match,
+      and the engine THROWS at runtime if two do. FIRST — the first matching rule wins; use it
+      whenever the conditions can overlap (ranges, «всё остальное» fallback rows).
+      COLLECT — all matches are returned as a list.
+
+  aggregation:
+    type: string
+    enum: [SUM, MIN, MAX, COUNT]
+    description: Only with hitPolicy COLLECT. Ignored otherwise.
+
+  inputs:
+    type: array
+    description: Input columns, in table order. At least one.
+    items:
+      type: object
+      required: [variable]
+      properties:
+        variable:
+          type: string
+          description: >-
+            The DMN variable name, latin, no spaces (`approvalStage`, `amount`).
+        label:
+          type: string
+          description: Column header a person reads («Этап согласования»).
+        type:
+          type: string
+          enum: [string, integer, long, double, boolean, date]
+          description: Column type. Decides how the cell values are quoted. Always set it.
+        sourceAtt:
+          type: string
+          description: >-
+            The RECORD ATTRIBUTE that feeds this variable — this is what makes the table runnable
+            (`ecos:model`). It must be an attribute of the bound type; `?num` / `?str` suffixes are
+            allowed (`amount?num`). Always set it on an input column.
+
+  outputs:
+    type: array
+    description: Output columns, in table order. At least one.
+    items:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: >-
+            The result variable the process reads afterwards (`confirmer`, `decision`).
+        label:
+          type: string
+        type:
+          type: string
+          enum: [string, integer, long, double, boolean, date]
+          description: Column type. Always set it.
+
+  rules:
+    type: array
+    description: >-
+      The rows. Each row carries ONE cell per input column and ONE per output column, in the same
+      order as `inputs` / `outputs` — a shorter or longer list is rejected.
+    items:
+      type: object
+      required: [when, then]
+      properties:
+        when:
+          type: array
+          description: >-
+            Conditions, one per input column. Write PLAIN values — `"Договор"`, `1`, `true` — the
+            quoting is added by the compiler from the column type. Use `-` for «any value».
+            For a comparison or a range prefix the cell with `=`:
+            `"=> 100000"`, `"=[1..5]"`, `"=not(\"draft\")"`.
+        then:
+          type: array
+          description: >-
+            Results, one per output column. Plain values again; `=` for a FEEL expression.
+        description:
+          type: string
+          description: One short line saying what this row decides. Optional but useful.

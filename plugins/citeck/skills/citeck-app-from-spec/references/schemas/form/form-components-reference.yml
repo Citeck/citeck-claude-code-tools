@@ -1,0 +1,1330 @@
+# Formio Components Reference for Citeck ECOS
+# This file describes available components for form generation
+
+form_structure:
+  description: "Root structure of a Citeck Formio form"
+  required_fields:
+    - id: "Unique form identifier (e.g., 'leave-request-form')"
+    - title: "Form title with i18n support"
+    - definition:
+        components: "Array of form components"
+        display: "form"
+  optional_fields:
+    - typeRef: "Reference to ECOS type (e.g., 'emodel/type@leave-request') — only when the prompt gives a type_ref"
+    - formKey: "Optional form key"
+    - description: "Form description"
+    - width: "xs | sm | m | lg | extra-lg | full"
+    - system: "true/false - system form flag"
+    - i18n: "Internationalization object"
+
+components:
+  # `validate.required: true` in the examples below shows the syntax only — when a field is required is
+  # decided by the rules of the prompt, never by an example.
+  # Input Components
+  textfield:
+    description: "Single-line text input"
+    use_when:
+      - "Short text values (names, titles, identifiers)"
+      - "Text with patterns (email, phone with validate.pattern)"
+    example: |
+      {
+        "type": "textfield",
+        "key": "shortName",
+        "label": { "ru": "Краткое название", "en": "Short Name" },
+        "validate": { "required": true, "maxLength": 100 },
+        "input": true
+      }
+    properties:
+      - label: "Field label (string or i18n object)"
+      - key: "Unique field key matching attribute id"
+      - validate: "{ required, pattern, maxLength, minLength }"
+      - defaultValue: "Default value"
+      - inputMask: "Input mask (9 digit, A letter, * letter or digit; no optional characters — a value shorter than the mask is rejected). A mask of input slots only, without separators (INN, OGRN), is set ONLY when EVERY value validate.pattern admits has the mask's exact length; when the pattern admits several lengths (INN: 10 or 12 digits) use validate.pattern alone. A mask with separators (phone +7 (999) 999-99-99) is allowed when its filled values pass validate.pattern. Code removes a mask that contradicts the pattern"
+      - placeholder: "Placeholder text"
+
+  textarea:
+    description: "Multi-line text input with rich text editor"
+    use_when:
+      - "Description, comments, notes, reasons, justifications"
+      - "Long text content"
+      - "Any multi-line user input"
+    editor_rule: >
+      ALWAYS set "editor": "lexical" by default. This gives users rich text formatting
+      (bold, lists, links). Only use "editor": "ace" for technical fields where the user
+      inputs code or scripts (JavaScript, JSON, YAML configs).
+    example: |
+      {
+        "type": "textarea",
+        "key": "description",
+        "label": { "ru": "Описание", "en": "Description" },
+        "editor": "lexical",
+        "rows": 5,
+        "input": true
+      }
+    example_code_editor: |
+      {
+        "type": "textarea",
+        "key": "body",
+        "label": { "ru": "Body (шаблон Freemarker)", "en": "Body (Freemarker template)" },
+        "editor": "ace",
+        "rows": 20,
+        "input": true
+      }
+    properties:
+      - editor: "'lexical' (default, always use) | 'ace' (only for code/script fields)"
+      - rows: "Number of visible rows"
+      - as: "For ace editor only: 'javascript' | 'json' | 'yaml'"
+
+  mlText:
+    description: "Multi-language text field — use ONLY for system/technical forms"
+    use_when:
+      - "System forms: type name, status name, template title — fields that MUST have values in multiple languages"
+    do_NOT_use_when:
+      - "Business/user forms (requests, contracts, invoices, orders, applications)"
+      - "Any form where end users fill in data — they write in one language"
+      - "Description, comment, note, reason fields — always use textarea instead"
+    note: >
+      IMPORTANT: For MLTEXT type attributes on business forms, use textfield (short text)
+      or textarea (long text) instead of mlText. The mlText component shows multiple language
+      tabs which confuses end users. Reserve mlText strictly for admin/system forms where
+      multilingual values are technically required (e.g., configuring type names, statuses).
+    example: |
+      {
+        "type": "mlText",
+        "key": "name",
+        "label": { "ru": "Название", "en": "Name" },
+        "validate": { "required": true },
+        "input": true
+      }
+
+  number:
+    description: "Numeric input field"
+    use_when:
+      - "Amounts, quantities, numeric values"
+    example: |
+      {
+        "type": "number",
+        "key": "totalAmount",
+        "label": { "ru": "Сумма", "en": "Amount" },
+        "delimiter": true,
+        "decimalLimit": 2,
+        "validate": { "required": true, "min": 0 },
+        "input": true
+      }
+    properties:
+      - delimiter: "true - add thousand separators"
+      - decimalLimit: "Number of decimal places"
+      - validate: "{ required, min, max, integer }"
+      - defaultValue: "Default number, e.g. 1"
+
+  checkbox:
+    description: "Boolean checkbox"
+    use_when:
+      - "Yes/No, true/false values"
+      - "Confirmation flags"
+    example: |
+      {
+        "type": "checkbox",
+        "key": "isUrgent",
+        "label": { "ru": "Срочно", "en": "Urgent" },
+        "input": true
+      }
+    properties:
+      - hasThreeStates: "true - null/true/false states"
+      - defaultValue: "true — checked by default"
+
+  datetime:
+    description: "Date/time picker"
+    use_when:
+      - "Date fields"
+      - "Date+time fields"
+    example: |
+      {
+        "type": "datetime",
+        "key": "startDate",
+        "label": { "ru": "Дата начала", "en": "Start Date" },
+        "format": "dd.MM.yyyy",
+        "enableTime": false,
+        "validate": { "required": true },
+        "input": true
+      }
+    example_with_time: |
+      {
+        "type": "datetime",
+        "key": "meetingDateTime",
+        "label": { "ru": "Дата и время", "en": "Date and Time" },
+        "format": "dd.MM.yyyy HH:mm",
+        "enableTime": true,
+        "timePicker": { "showMeridian": false },
+        "validate": { "required": true },
+        "input": true
+      }
+    properties:
+      - format: "Date format: 'dd.MM.yyyy' for date only, 'dd.MM.yyyy HH:mm' for date+time."
+      - enableTime: "true - include time selection"
+      - timePicker: "{ showMeridian: false } - REQUIRED when enableTime is true, disables 12-hour AM/PM format"
+      - datePicker: "{ minDate, maxDate }"
+      - customDefaultValue: "'value = new Date();' — today by default"
+
+  # Selection Components
+  ecosSelect:
+    description: "Citeck dropdown with predefined values"
+    use_when:
+      - "Selection from static options list"
+      - "Enum-like fields"
+      - "OPTIONS type attributes"
+    example_static_values: |
+      {
+        "type": "ecosSelect",
+        "key": "priority",
+        "label": { "ru": "Приоритет", "en": "Priority" },
+        "data": {
+          "values": [
+            { "label": { "ru": "Низкий", "en": "Low" }, "value": "low" },
+            { "label": { "ru": "Средний", "en": "Medium" }, "value": "medium" },
+            { "label": { "ru": "Высокий", "en": "High" }, "value": "high" }
+          ]
+        },
+        "input": true
+      }
+    example_options_attribute: |
+      {
+        "type": "ecosSelect",
+        "key": "color",
+        "label": { "ru": "Цвет", "en": "Color" },
+        "data": {
+          "url": "/citeck/ecos/records/query"
+        },
+        "input": true
+      }
+    options_attribute_note: >
+      When the ecosSelect is bound to an OPTIONS type attribute in the data type,
+      use the "data.url" format instead of "data.values". The platform will automatically
+      load the available options from the attribute's configuration. No need to hardcode values.
+    properties:
+      - data.values: "Array of { label, value } options — use for static/custom options"
+      - data.url: "'/citeck/ecos/records/query' — use for OPTIONS type attributes, values load automatically"
+      - multiple: "true - allow multiple selection"
+      - defaultValue: "Default selected value"
+
+  selectJournal:
+    description: "Selection from Citeck journal (record reference)"
+    use_when:
+      - "Association fields (ASSOC type)"
+      - "Reference to other records"
+    example: |
+      {
+        "type": "selectJournal",
+        "key": "department",
+        "label": { "ru": "Подразделение", "en": "Department" },
+        "input": true
+      }
+    properties:
+      - journalId: "Set by code from the ASSOC target type — do not write it"
+      - customPredicateJs: >
+          JS filter for the dropdown, evaluated on data change: assign a predicate to `value`,
+          e.g. value = { "t": "eq", "att": "parentProject", "val": _.get(data, "project") }.
+          This is how a list is limited by another field's value (dependent/cascading selects).
+          "att" is an attribute id of the TARGET type (the records being selected), not the key of
+          the parent field on this form; code checks it against the target type's model.
+          "val" must be a record of the type "att" points at (or of its child type); code checks the
+          pair. No such field on the form: common_patterns.dependent_filter_via_related_record.
+      - queryData: "Extra data sent with the query. NOT a filter — use customPredicateJs to filter"
+      - hideCreateButton: "Set by code when the filter reads another form field: the create window passes no form values, so a new record would not appear in the list — do not write it"
+      - modalTitle: "Selection dialog title — a plain STRING (Russian), NOT an i18n {ru, en} object: ecos-ui reads it as a string"
+      - multiple: "true - allow multiple selection"
+      - defaultValue: "Ref of an existing record selected by default, e.g. 'emodel/currency@rub'"
+
+  selectOrgstruct:
+    description: "Organization structure person/group picker"
+    use_when:
+      - "PERSON type attributes"
+      - "User/group selection"
+    example: |
+      {
+        "type": "selectOrgstruct",
+        "key": "approver",
+        "label": { "ru": "Согласующий", "en": "Approver" },
+        "allowedAuthorityType": "USER",
+        "input": true
+      }
+    properties:
+      - allowedAuthorityType: "'USER' | 'GROUP' | null (both)"
+      - multiple: "true - allow multiple selection"
+      - allUsersGroup: "true - include 'all users' option"
+      - currentUserByDefault: "true — the current user by default"
+
+  # File Components
+  file:
+    description: "File upload component"
+    use_when:
+      - "CONTENT type attributes"
+      - "File attachments"
+      - "ASSOC to emodel/type@attachment or a type inheriting from it (fileTypes value = local id of the target type)"
+    example: |
+      {
+        "type": "file",
+        "key": "documentFile",
+        "label": { "ru": "Файл договора", "en": "Contract file" },
+        "storage": "url",
+        "multiple": false,
+        "fileMaxSize": "100MB",
+        "input": true
+      }
+    properties:
+      - storage: "'url' | 'base64'"
+      - fileMaxSize: "Max file size string"
+      - fileTypes: "Array of allowed types"
+      - multiple: "A file field of a CONTENT attribute has \"multiple\": false — a CONTENT attribute stores ONE file, a second attached file is not saved (code sets false). Only docs:documents (child association of attachments) keeps multiple, and a file field of an ASSOC to emodel/type@attachment or its descendant takes the attribute's multiple"
+
+  # Layout Components
+  panel:
+    description: "Container panel for grouping fields"
+    use_when:
+      - "Logical grouping of related fields"
+      - "Collapsible sections"
+    example: |
+      {
+        "type": "panel",
+        "key": "mainInfoPanel",
+        "title": { "ru": "Основная информация", "en": "Main Information" },
+        "collapsible": false,
+        "components": []
+      }
+    properties:
+      - title: "Panel title"
+      - collapsible: "true - can collapse/expand"
+      - collapsed: "true - initially collapsed"
+      - components: "Nested components array"
+
+  columns:
+    description: "Multi-column layout container"
+    use_when:
+      - "Side-by-side field arrangement"
+      - "Grid layouts"
+    example: |
+      {
+        "type": "columns",
+        "key": "twoColumnLayout",
+        "columns": [
+          {
+            "type": "column",
+            "width": 6,
+            "components": []
+          },
+          {
+            "type": "column",
+            "width": 6,
+            "components": []
+          }
+        ]
+      }
+    column_widths:
+      - "12 = full width"
+      - "6 = half width (2 columns)"
+      - "4 = third width (3 columns)"
+      - "3 = quarter width (4 columns)"
+
+  tabs:
+    description: "Tabbed interface container"
+    use_when:
+      - "Complex forms with many sections"
+      - "Organizing related groups"
+    example: |
+      {
+        "type": "tabs",
+        "key": "formTabs",
+        "components": [
+          {
+            "label": { "ru": "Основное", "en": "Main" },
+            "key": "mainTab",
+            "components": []
+          },
+          {
+            "label": { "ru": "Дополнительно", "en": "Additional" },
+            "key": "additionalTab",
+            "components": []
+          }
+        ]
+      }
+
+  button:
+    description: "Action button (submit, cancel, etc.)"
+    use_when:
+      - "Form submission (Save/Create)"
+      - "Cancel/close actions"
+    example_cancel: |
+      {
+        "label": { "ru": "Отмена", "en": "Cancel" },
+        "action": "event",
+        "state": "",
+        "showValidations": false,
+        "event": "cancel",
+        "block": true,
+        "type": "button",
+        "input": true,
+        "key": "cancelButton"
+      }
+    example_submit: |
+      {
+        "label": { "ru": "Сохранить", "en": "Save" },
+        "key": "submit",
+        "state": "",
+        "theme": "primary",
+        "block": true,
+        "disableOnInvalid": true,
+        "type": "button",
+        "input": true
+      }
+    example_draft: |
+      {
+        "label": { "ru": "Сохранить черновик", "en": "Save draft" },
+        "key": "saveDraftButton",
+        "action": "submit",
+        "state": "draft",
+        "showValidations": false,
+        "block": true,
+        "type": "button",
+        "input": true,
+        "customConditional": "show = _.get(instance, 'options.formMode') !== 'EDIT' || String(_.get(data, '_isDraft')) !== 'false';"
+      }
+    example_draft_flag_loader: |
+      {
+        "type": "hidden",
+        "key": "_isDraft",
+        "label": { "ru": "Черновик", "en": "Draft" },
+        "input": true,
+        "persistent": false,
+        "clearOnHide": false
+      }
+    draft_flag: |
+      «Черновик» is a SYSTEM FLAG of a record, not a lifecycle status (a type status named «Черновик» does not make a
+      record a draft). A Submit button with "state": "draft" saves the record as a draft: mandatory fields are not
+      validated and the type's auto-started process does NOT start. A Submit button with "state": "" makes the record
+      active (ecos-ui sends `_state: "submitted"`), and the process starts at that moment. So a form that supports
+      drafts carries TWO Submit buttons: «Сохранить черновик» (example_draft, no disableOnInvalid) and «Отправить»
+      (example_submit with the label { "ru": "Отправить", "en": "Submit" }). The type's single form serves create and
+      edit: the draft button's customConditional hides it when an ACTIVE record is edited (a draft button there would
+      turn a running record back into a draft — the process keeps running), which needs the hidden `_isDraft` component
+      (example_draft_flag_loader; `persistent: false` keeps it out of the save). Programmatically: `_state: "draft"`
+      sets the flag, any other `_state` clears it; read it as `_isDraft?bool`.
+    properties:
+      - action: "'submit' (default) | 'event' | 'reset'"
+      - state: "'' — a normal save (the record is active); 'draft' — save as a draft (see draft_flag)"
+      - event: "Event name for action: 'event' (e.g., 'cancel')"
+      - theme: "'primary' | 'secondary' | 'danger' | default (no theme)"
+      - block: "true - full width button"
+      - disableOnInvalid: "true - disable when form has validation errors"
+      - showValidations: "true - show validation errors on click"
+
+  horizontalLine:
+    description: "Visual separator line"
+    use_when:
+      - "Separating form sections"
+    example: |
+      {
+        "type": "horizontalLine",
+        "key": "separator1"
+      }
+
+  # Data Components
+  tableForm:
+    description: "Inline table for related records"
+    use_when:
+      - "Multiple child records"
+      - "Line items, positions"
+    example: |
+      {
+        "type": "tableForm",
+        "key": "positions",
+        "label": { "ru": "Позиции", "en": "Positions" },
+        "source": { "type": "attribute", "attribute": "positions" },
+        "multiple": true,
+        "input": true
+      }
+
+  asyncData:
+    description: "Async data loader component"
+    use_when:
+      - "Loading data from records"
+      - "Calculated fields from server"
+    example: |
+      {
+        "type": "asyncData",
+        "key": "loadedData",
+        "source": {
+          "type": "record",
+          "record": { "id": "${recordRef}", "attributes": { "status": "_status?str" } }
+        }
+      }
+
+# Type to Component Mapping
+type_mapping:
+  TEXT: textfield
+  MLTEXT: "textfield (default) or textarea (for long text). Use mlText ONLY for system/admin forms where multilingual input is required"
+  NUMBER: number
+  DATE: "datetime (enableTime: false, format: dd.MM.yyyy)"
+  DATETIME: "datetime (enableTime: true, format: dd.MM.yyyy HH:mm)"
+  BOOLEAN: checkbox
+  PERSON: selectOrgstruct
+  ASSOC: "selectJournal; an ASSOC to emodel/type@attachment or its descendant: file (multiple as the attribute, fileTypes value = local id of the target type)"
+  CONTENT: "file (multiple: false — one file)"
+  OPTIONS: ecosSelect
+
+# Semantic Rules for Intelligent Component Selection
+semantic_rules:
+  textarea_triggers:
+    - description
+    - описание
+    - comment
+    - комментарий
+    - note
+    - заметка
+    - details
+    - подробности
+    - reason
+    - причина
+    - justification
+    - обоснование
+
+  number_with_delimiter:
+    - amount
+    - сумма
+    - price
+    - цена
+    - cost
+    - стоимость
+
+  number_integer:
+    - quantity
+    - количество
+    - count
+    - число
+
+  person_single:
+    description: "Use allowedAuthorityType: 'USER'"
+    triggers:
+      - manager
+      - руководитель
+      - approver
+      - согласующий
+      - responsible
+      - ответственный
+
+  person_group:
+    description: "Use allowedAuthorityType: 'GROUP'"
+    triggers:
+      - team
+      - команда
+      - group
+      - группа
+      - department
+      - подразделение
+
+  person_multiple:
+    description: "Use multiple: true"
+    triggers:
+      - participants
+      - участники
+      - assignees
+      - исполнители
+
+  textfield_with_mask:
+    description: "Use validate.pattern on textfield; add inputMask only when its filled values pass the pattern (a mask without separators: only when every admissible value has its length)"
+    triggers:
+      - phone: "validate.pattern for phone number; an inputMask with separators is allowed when its filled values pass the pattern"
+      - телефон: "validate.pattern for phone number; an inputMask with separators is allowed when its filled values pass the pattern"
+      - email: "pattern for email validation"
+      - почта: "pattern for email validation"
+      - inn: "validate.pattern only (10 or 12 digits), no inputMask"
+      - инн: "validate.pattern only (10 or 12 digits), no inputMask"
+      - ogrn: "validate.pattern only (13 or 15 digits), no inputMask"
+      - огрн: "validate.pattern only (13 or 15 digits), no inputMask"
+      - kpp: "validate.pattern of 9 characters; inputMask allowed with it"
+      - кпп: "validate.pattern of 9 characters; inputMask allowed with it"
+      - snils: "inputMask for SNILS"
+      - снилс: "inputMask for SNILS"
+
+# ============================================================================
+# ADVANCED FORM LOGIC
+# ============================================================================
+# This section describes patterns for custom validation, conditional visibility,
+# calculated values, dynamic component behavior, and async data loading.
+# All patterns are extracted from real production Citeck ECOS forms.
+
+# ----------------------------------------------------------------------------
+# 1. CUSTOM VALIDATION
+# ----------------------------------------------------------------------------
+custom_validation:
+  description: >
+    Custom validation uses JavaScript expressions in the validate.custom field.
+    The expression must set `valid` to `true` or to an error message string.
+    Available variables: input (current value), data (all form data), instance (component instance).
+    ecos-ui does NOT run validate.custom on an empty field that is not required: the check is skipped before any rule
+    is read. A rule on an optional field therefore judges only an entered value; it can never demand a value. For «this
+    field is required when that one is filled» use `conditional_required` below, not validate.custom.
+
+  conditional_required:
+    description: "A field required only when another field is filled, e.g. the currency once an amount is given"
+    when_to_use: "Any «fill this when that is filled» rule"
+    example: |
+      {
+        "type": "textfield",
+        "key": "currency",
+        "label": { "ru": "Валюта", "en": "Currency" },
+        "logic": [
+          {
+            "name": "requiredWhenAmountFilled",
+            "trigger": { "type": "javascript", "javascript": "result = !!_.get(data, 'amount');" },
+            "actions": [
+              {
+                "name": "setRequired",
+                "type": "property",
+                "property": { "label": "Required", "value": "validate.required", "type": "boolean" },
+                "state": "true"
+              }
+            ]
+          }
+        ],
+        "input": true
+      }
+    wrong: |
+      "validate": { "custom": "valid = (data.amount && !input) ? 'Укажите валюту' : true;" }
+    note: "The wrong shape never fires: the empty optional field is not validated, so the record is saved without the value."
+
+  positive_number:
+    description: "Validate that a number is positive (allow empty)"
+    when_to_use: "Amount, price, sum, VAT fields — any number that must be > 0 if filled"
+    example: |
+      {
+        "type": "number",
+        "key": "amount",
+        "label": { "ru": "Сумма", "en": "Amount" },
+        "validate": {
+          "custom": "valid = (input > 0) || !input ? true : 'This field may contain only a positive number';"
+        },
+        "delimiter": true,
+        "input": true
+      }
+    note: "Error messages can be i18n keys if the form has an i18n section"
+
+  date_range_validation:
+    description: "Validate that end date is not before start date"
+    when_to_use: "Any date pair: startDate/endDate, dateFrom/dateTo, periodStart/periodEnd"
+    example: |
+      {
+        "type": "datetime",
+        "key": "endDate",
+        "label": { "ru": "Дата окончания", "en": "End Date" },
+        "format": "dd.MM.yyyy",
+        "enableTime": false,
+        "validate": {
+          "required": true,
+          "custom": "valid = (!input || !data.startDate || !moment(input).isBefore(moment(data.startDate))) ? true : 'Дата окончания не может быть раньше даты начала';"
+        },
+        "input": true
+      }
+    note: "Apply this on the END date field. Use ternary operator (not if/else blocks) to avoid curly braces in the expression. Adjust data.startDate to match the actual start date field key."
+
+  pattern_validation:
+    description: "Regex pattern for text input"
+    when_to_use: "IDs, codes, identifiers — restrict allowed characters"
+    example: |
+      {
+        "type": "textfield",
+        "key": "id",
+        "label": { "ru": "Идентификатор", "en": "Identifier" },
+        "validate": {
+          "required": true,
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_:-]*$"
+        },
+        "input": true
+      }
+
+  license_feature_validation:
+    description: "Validate that a feature is available via license check"
+    when_to_use: "Enterprise-only features — checkbox should fail validation if feature not licensed"
+    example: |
+      {
+        "type": "checkbox",
+        "key": "templated-content:autoGenerate",
+        "label": { "ru": "Сгенерировать из шаблона", "en": "Generate from template" },
+        "validate": {
+          "custom": "let featureAllowed = _.get(data, 'license.isDeveloper') || _.get(data, 'license.hasFeature');\nif (value === true && !featureAllowed) {\n  valid = Citeck.helpers.getMLValue({\n    \"ru\": \"Функция доступна в Enterprise версии\",\n    \"en\": \"Feature available in Enterprise version\"\n  });\n} else {\n  valid = true;\n}"
+        },
+        "input": true
+      }
+    note: "Citeck.helpers.getMLValue() returns localized error messages"
+
+  validation_rules:
+    - "Always set `valid = true` in the else branch"
+    - "Use `!input` check to allow empty values (unless combined with required)"
+    - "Error message strings support i18n keys if defined in the form's i18n section"
+    - "Use `_.get(data, 'path')` to safely access nested form data"
+
+# ----------------------------------------------------------------------------
+# 2. CONDITIONAL VISIBILITY
+# ----------------------------------------------------------------------------
+conditional_visibility:
+  description: >
+    Controls when a component is shown or hidden. Two approaches:
+    1. `conditional` — simple field-based conditions (no JS)
+    2. `customConditional` — JavaScript expression that sets `show = true/false`
+
+  simple_conditional:
+    description: "Show/hide based on another field's value (no JavaScript)"
+    example: |
+      {
+        "type": "textfield",
+        "key": "details",
+        "label": { "ru": "Подробности", "en": "Details" },
+        "conditional": {
+          "show": true,
+          "when": "hasDetails",
+          "eq": "true"
+        },
+        "input": true
+      }
+    note: "'show' can be true/false/'true'/'false'. 'when' is the key of another component. 'eq' is the value to compare."
+
+  form_mode_conditional:
+    description: "Show only in CREATE or EDIT mode"
+    when_to_use: "Fields relevant only during creation (e.g., auto-generate checkbox)"
+    example_create_only: |
+      {
+        "type": "checkbox",
+        "key": "generate",
+        "label": { "ru": "Генерировать номер", "en": "Generate number" },
+        "customConditional": "show = instance.options.formMode === 'CREATE'",
+        "input": true
+      }
+    example_edit_only: |
+      {
+        "customConditional": "show = instance.options.formMode !== 'CREATE'"
+      }
+
+  status_based_conditional:
+    description: "Show/hide based on the record status (stage)"
+    when_to_use: "A block shown only at some stages: «первичные сведения — до этапа X», «причина отказа — на этапе Отказ»"
+    example: |
+      {
+        "type": "panel",
+        "key": "primaryInfoPanel",
+        "customConditional": "const st = _.get(data, '_status');\nshow = (st === 'new' || st === 'first-contact');",
+        "components": []
+      }
+    note: >
+      `_.get(data, '_status')` is the status ID of the type's model (compare with ids, never with status names).
+      Do NOT add a component for `_status` yourself: code adds a hidden, never-saved `_status` component to the form,
+      and on a form that CREATES a record it holds the status the record is created with (the type's defaultStatus),
+      so a block «до этапа X» is visible on create.
+
+  data_dependent_conditional:
+    description: "Show based on another field's value using JavaScript"
+    when_to_use: "Config panels that depend on a type selector"
+    example: |
+      {
+        "type": "panel",
+        "key": "scriptConfigPanel",
+        "customConditional": "show = data.type === 'script';",
+        "components": []
+      }
+
+  read_only_conditional:
+    description: "Show only in read-only/view mode (e.g., horizontal lines as separators)"
+    example: |
+      {
+        "type": "horizontalLine",
+        "key": "separator1",
+        "customConditional": "show = instance.options.readOnly && instance.options.viewAsHtml"
+      }
+
+  combined_conditional:
+    description: "Complex conditions combining form mode, status, and data"
+    example: |
+      {
+        "customConditional": "var formMode = _.get(instance, 'options.formMode');\nvar updateContent = _.get(data, 'templated-content:autoGenerate');\nshow = formMode !== 'CREATE' || (updateContent !== true && formMode === 'CREATE');"
+      }
+
+  conditional_rules:
+    - "`data` holds ONLY the values of this form's own components, by their `key`. A condition (customConditional or conditional.when) may read only such a key, or `_status` (see status_based_conditional). A type attribute that is not on the form is NOT in `data`: put its field on the form first. A condition reading any other key is rejected by the draft check, and if it stays, code removes it"
+    - "Use `instance.options.formMode` to check form mode ('CREATE' | 'EDIT')"
+    - "Use `instance.options.readOnly` and `instance.options.viewAsHtml` for view mode"
+    - "Always use safe access: `const {field} = data || {}` or `_.get(data, 'path')`"
+    - "Set `show = true` or `show = false` — the variable `show` must be assigned"
+
+# ----------------------------------------------------------------------------
+# 3. CALCULATED VALUES
+# ----------------------------------------------------------------------------
+calculated_values:
+  description: >
+    Automatically compute a component's value based on other form data.
+    Two mechanisms:
+    - `calculateValue` — recalculates on every change (use with `allowCalculateOverride: true`)
+    - `customDefaultValue` — sets initial value once on form load
+    A default (`defaultValue`, `customDefaultValue`, `currentUserByDefault`) is applied when the form is opened to CREATE
+    a record: a record created by a process, the API or an import does not get it.
+
+  calculate_value:
+    description: "Dynamic value that updates when dependencies change"
+    properties:
+      - calculateValue: "JavaScript expression that sets `value`"
+      - allowCalculateOverride: "true — user can manually override the calculated value"
+      - refreshOn: "Array of field keys that trigger recalculation"
+
+    example_from_related_record:
+      description: "Auto-fill from parent record data loaded via asyncData"
+      example: |
+        {
+          "type": "selectJournal",
+          "key": "legalEntity",
+          "label": { "ru": "Юр. лицо", "en": "Legal Entity" },
+          "refreshOn": ["mainContract"],
+          "calculateValue": "const {_agreementValues} = data || {};\nconst {_legalEntity} = _agreementValues || {};\nif (_legalEntity !== undefined) {\n  value = _legalEntity;\n}",
+          "allowCalculateOverride": true,
+          "input": true
+        }
+
+    example_date_offset:
+      description: "Set default date relative to today"
+      example: |
+        {
+          "type": "datetime",
+          "key": "duration",
+          "label": { "ru": "Срок действия", "en": "Duration" },
+          "format": "dd.MM.yyyy",
+          "enableTime": false,
+          "calculateValue": "value = moment().add(1, 'year');",
+          "allowCalculateOverride": true,
+          "input": true
+        }
+
+    example_conditional_fill:
+      description: "Set value based on form mode"
+      example: |
+        {
+          "type": "textfield",
+          "key": "number",
+          "label": { "ru": "Номер", "en": "Number" },
+          "calculateValue": "const formMode = _.get(instance, 'options.formMode');\nif (formMode !== 'CREATE') {\n  value = data._docNum;\n}",
+          "allowCalculateOverride": true,
+          "input": true
+        }
+
+    example_from_external_data:
+      description: "Auto-fill from incoming task data"
+      example: |
+        {
+          "type": "selectJournal",
+          "key": "counterparty",
+          "calculateValue": "const { fromIncomePackageTask = {} } = data || {};\nconst { urkk_counterparty } = fromIncomePackageTask || {};\nif (!!urkk_counterparty) {\n  return urkk_counterparty;\n}",
+          "allowCalculateOverride": true,
+          "input": true
+        }
+
+  custom_default_value:
+    description: "Set initial value once — unlike calculateValue, does not recalculate"
+    example_simple:
+      description: "Default checkbox to true"
+      example: |
+        {
+          "type": "checkbox",
+          "key": "generate",
+          "customDefaultValue": "value = true;",
+          "input": true
+        }
+    example_from_async:
+      description: "Set default from async-loaded data"
+      example: |
+        {
+          "type": "ecosSelect",
+          "key": "currency",
+          "customDefaultValue": "if (data.currencyList && data.currencyList.records) {\n  var el = data.currencyList.records.find(x => x.id === 'emodel/currency@rub');\n  if (el) {\n    value = el.id;\n  }\n}",
+          "input": true
+        }
+
+  default_date:
+    description: "Set default date to today using moment()"
+    example: |
+      {
+        "type": "datetime",
+        "key": "date",
+        "defaultDate": "moment()",
+        "format": "dd.MM.yyyy",
+        "enableTime": false,
+        "input": true
+      }
+
+  calculated_value_rules:
+    - "Always use `allowCalculateOverride: true` so user can edit"
+    - "Use `refreshOn` array to specify which fields trigger recalculation"
+    - "Use `_.get()` for safe nested property access"
+    - "Use `moment()` for date calculations (available globally)"
+    - "Check `instance.options.formMode` to behave differently in CREATE vs EDIT"
+
+# ----------------------------------------------------------------------------
+# 4. COMPONENT LOGIC (DYNAMIC BEHAVIOR)
+# ----------------------------------------------------------------------------
+component_logic:
+  description: >
+    The `logic` array allows dynamic component behavior: disable/enable fields,
+    change labels, set values, or modify validation based on conditions.
+    Each logic entry has a trigger (condition) and actions (what to do).
+
+  structure: |
+    "logic": [
+      {
+        "name": "LogicName",
+        "trigger": {
+          "type": "javascript",
+          "javascript": "result = <boolean expression>;"
+        },
+        "actions": [
+          {
+            "name": "actionName",
+            "type": "property",
+            "property": { "label": "PropertyLabel", "value": "propertyPath", "type": "propertyType" },
+            "state": "value"
+          }
+        ]
+      }
+    ]
+
+  trigger_types:
+    javascript:
+      description: "JavaScript expression that sets `result` to true/false"
+      example: "result = _.get(data, 'isEntInstalled.isEnterprise', false);"
+    simple:
+      description: "Simple field comparison without JavaScript"
+      example: |
+        {
+          "type": "simple",
+          "simple": { "show": true, "when": "inbound:isInbound", "eq": "false" }
+        }
+
+  action_types:
+    disable_field:
+      description: "Disable a field when condition is true"
+      example: |
+        {
+          "name": "Disable",
+          "trigger": {
+            "type": "javascript",
+            "javascript": "const {_agreementValues} = data || {};\nconst {_legalEntity} = _agreementValues || {};\nresult = !!_legalEntity;"
+          },
+          "actions": [
+            {
+              "name": "setDisabled",
+              "type": "property",
+              "property": { "label": "Disabled", "value": "disabled", "type": "boolean" },
+              "state": "true"
+            }
+          ]
+        }
+
+    enable_field:
+      description: "Enable a field (set disabled to false)"
+      example: |
+        {
+          "name": "enable",
+          "trigger": {
+            "type": "javascript",
+            "javascript": "result = _.get(data, 'isEntInstalled.isEnterprise', false);"
+          },
+          "actions": [
+            {
+              "name": "enable",
+              "type": "property",
+              "property": { "label": "Disabled", "value": "disabled", "type": "boolean" },
+              "state": "false"
+            }
+          ]
+        }
+
+    set_required:
+      description: "Dynamically set a field as required"
+      example: |
+        {
+          "name": "isRequired",
+          "trigger": {
+            "type": "simple",
+            "simple": { "show": true, "when": "inbound:isInbound", "eq": "false" }
+          },
+          "actions": [
+            {
+              "name": "setRequired",
+              "type": "property",
+              "property": { "label": "Required", "value": "validate.required", "type": "boolean" },
+              "state": "true"
+            }
+          ]
+        }
+
+    set_value:
+      description: "Set the component's value programmatically"
+      example: |
+        {
+          "name": "set_value",
+          "trigger": {
+            "type": "javascript",
+            "javascript": "const {_agreementValues, currency: curVal} = data || {};\nconst {_currency} = _agreementValues || {};\nresult = !!_currency && curVal !== _currency;"
+          },
+          "actions": [
+            {
+              "name": "set_value",
+              "type": "value",
+              "value": "value = data._agreementValues._currency;"
+            }
+          ]
+        }
+
+    clear_value:
+      description: "Clear the component's value"
+      example: |
+        {
+          "name": "clear_value",
+          "type": "value",
+          "value": "value = null"
+        }
+
+    change_label:
+      description: "Dynamically change the component's label"
+      example: |
+        {
+          "name": "Label",
+          "trigger": {
+            "type": "javascript",
+            "javascript": "var isDraftStatus = data.caseStatus === 'draft';\nvar isCreateMode = instance.options.formMode === 'CREATE';\nresult = !isDraftStatus && !isCreateMode;"
+          },
+          "actions": [
+            {
+              "name": "Set label",
+              "type": "property",
+              "property": { "label": "Label", "value": "label", "type": "string" },
+              "text": "Save"
+            }
+          ]
+        }
+
+    set_description:
+      description: "Set a descriptive text under the field (e.g., status info)"
+      example: |
+        {
+          "name": "Set description",
+          "trigger": {
+            "type": "javascript",
+            "javascript": "const {counterpartyData, counterparty} = data || {};\nconst {statusDisp, id} = counterpartyData || {};\nresult = !!statusDisp && id === counterparty;"
+          },
+          "actions": [
+            {
+              "name": "Set",
+              "type": "property",
+              "property": { "label": "Description", "value": "description", "type": "string" },
+              "text": "__t(idocs-contractor-status){{data.counterpartyData.statusDisp}}"
+            }
+          ]
+        }
+      note: "__t(key) is i18n translation, {{data.field}} is template interpolation"
+
+  logic_rules:
+    - "Trigger `javascript` must set `result` to true/false"
+    - "Action `type: 'property'` modifies component properties (disabled, label, validate.required)"
+    - "Action `type: 'value'` sets the component's value"
+    - "Use safe destructuring: `const {field} = data || {}`"
+    - "Multiple actions can be in one logic entry"
+    - "Multiple logic entries can be on one component"
+
+# ----------------------------------------------------------------------------
+# 5. ASYNC DATA LOADING
+# ----------------------------------------------------------------------------
+async_data:
+  description: >
+    The asyncData component loads data from the server and stores it in form data.
+    Other components can reference this data via `data.<asyncDataKey>`.
+    Always placed in a hidden columns section at the bottom of the form.
+
+  source_types:
+    record:
+      description: "Load attributes from a single record"
+      example: |
+        {
+          "type": "asyncData",
+          "key": "counterpartyData",
+          "label": "Counterparty data",
+          "source": {
+            "type": "record",
+            "record": {
+              "id": "{{data.counterparty}}",
+              "attributes": {
+                "statusDisp": "_status?disp",
+                "id": ".id"
+              }
+            },
+            "forceLoad": false
+          },
+          "update": { "type": "once" },
+          "refreshOn": [{ "label": "counterparty", "value": "counterparty" }],
+          "executionCondition": "const {counterparty} = data || {};\nvalue = !!counterparty;",
+          "input": true
+        }
+
+    records_query:
+      description: "Query multiple records and load their attributes"
+      example: |
+        {
+          "type": "asyncData",
+          "key": "currencyList",
+          "label": "Currency list",
+          "source": {
+            "type": "recordsQuery",
+            "recordsQuery": {
+              "attributes": { "key": "currencyName" },
+              "query": "var value = {\n  sourceId: 'emodel/currency',\n  query: {},\n  language: 'predicate'\n}",
+              "isSingle": false
+            },
+            "forceLoad": false
+          },
+          "update": { "type": "once" },
+          "triggerEventOnChange": true,
+          "eventName": "currencyListEvent",
+          "executionCondition": "const {root} = instance || {};\nconst {loading} = root || {};\nvalue = loading === false;",
+          "input": true
+        }
+
+    custom:
+      description: "Custom sync+async data loading with JavaScript"
+      example: |
+        {
+          "type": "asyncData",
+          "key": "scriptFnLoaded",
+          "label": "Script loader",
+          "source": {
+            "type": "custom",
+            "custom": {
+              "syncData": "value = { recId: instance.options.recordId };",
+              "asyncData": "return Citeck.Records.get(data.recId).load({'_config': 'config.fn?str'});"
+            },
+            "forceLoad": false
+          },
+          "update": { "type": "once" },
+          "executionCondition": "value = !_.has(data, 'scriptFnLoaded._config') && data.type === 'script';",
+          "input": true
+        }
+
+  properties:
+    - executionCondition: "JS expression that sets `value` to true/false — controls whether to execute"
+    - refreshOn: "Array of {label, value} — re-execute when these fields change"
+    - triggerEventOnChange: "true — fire an event when data loads"
+    - eventName: "Event name to fire (used with refreshOnEvent on other components)"
+    - "update.type": "'once' — load once | 'any-change' — reload on any form change"
+    - forceLoad: "true — always load, even if record id is the same"
+
+  async_data_rules:
+    - "Place asyncData components in a hidden columns section at the bottom of the form"
+    - "Use executionCondition to avoid loading when the dependent field is empty"
+    - "Use `{{data.fieldKey}}` syntax in record.id for dynamic record references"
+    - "Use `{{recordId}}` to reference the current record being edited"
+    - "Loaded data is available as `data.<asyncDataKey>` in all other components"
+    - "Use triggerEventOnChange + eventName to notify ecosSelect components via refreshOnEvent"
+
+# ----------------------------------------------------------------------------
+# 6. ECOSSELECT WITH DYNAMIC DATA
+# ----------------------------------------------------------------------------
+ecos_select_dynamic:
+  description: >
+    ecosSelect can load options dynamically from asyncData using dataSrc: 'custom'.
+    This is used when the options come from a server query (e.g., currency list).
+
+  example: |
+    {
+      "type": "ecosSelect",
+      "key": "currency",
+      "label": { "ru": "Валюта", "en": "Currency" },
+      "validate": { "required": true },
+      "dataSrc": "custom",
+      "data": {
+        "custom": "const {currencyList = {}} = data;\nconst {records = []} = currencyList;\nlet list = [];\nfor (var i in records) {\n  list.push({label: records[i].key, value: records[i].id});\n}\nvalues = list;"
+      },
+      "refreshOnEvent": true,
+      "refreshEventName": "currencyListEvent",
+      "defaultValue": "emodel/currency@rub",
+      "input": true
+    }
+  note: >
+    Requires asyncData component with key 'currencyList' that loads records
+    and fires 'currencyListEvent' when loaded. The data.custom script transforms
+    asyncData records into {label, value} pairs for the dropdown.
+
+# ----------------------------------------------------------------------------
+# 7. HIDDEN FIELDS AND DATA STORAGE
+# ----------------------------------------------------------------------------
+hidden_fields:
+  description: >
+    Hidden fields store data that is not visible to the user but is needed for
+    form logic (status flags, computed values, cross-field references).
+
+  example_hidden_flag: |
+    {
+      "type": "checkbox",
+      "key": "inbound:isInbound",
+      "label": { "ru": "isInbound" },
+      "hidden": true,
+      "clearOnHide": false,
+      "input": true
+    }
+
+  example_hidden_computed: |
+    {
+      "type": "hidden",
+      "key": "config",
+      "refreshOn": ["scriptFnEditor", "configJsonEditor", "type"],
+      "calculateValue": "if (data.type === 'script') { var fn = data.scriptFnEditor; value = (fn === '' || fn === undefined || fn === null) ? null : { fn: fn }; } else { value = data.configJsonEditor || null; }",
+      "input": true
+    }
+
+  rules:
+    - "Use `hidden: true` with `clearOnHide: false` to keep hidden values in form data"
+    - "A field that stores a record attribute and can be hidden by a condition (its own customConditional / conditional / logic, or one of an enclosing panel) gets `clearOnHide: false`, and so does a panel with such a condition: ecos-ui clears a hidden field by default and the save writes the empty value over the stored one. Code sets it when absent"
+    - "Use `type: 'hidden'` for purely computed values"
+    - "Hidden fields are useful for status flags, computed aggregates, and intermediate values"
+
+# ----------------------------------------------------------------------------
+# 8. COMMON FIELD PATTERNS
+# ----------------------------------------------------------------------------
+common_patterns:
+  current_user_default:
+    description: "Pre-fill selectOrgstruct with the current user"
+    example: |
+      {
+        "type": "selectOrgstruct",
+        "key": "performer",
+        "label": { "ru": "Исполнитель", "en": "Performer" },
+        "allowedAuthorityType": "USER",
+        "currentUserByDefault": true,
+        "allUsersGroup": "all",
+        "validate": { "required": true },
+        "input": true
+      }
+
+  disabled_by_default:
+    description: "Field starts disabled, enabled by logic based on async data"
+    example: |
+      {
+        "type": "checkbox",
+        "key": "digiSign",
+        "label": { "ru": "Электронная подпись", "en": "Digital signature" },
+        "disabled": true,
+        "logic": [
+          {
+            "name": "enableEvent",
+            "trigger": {
+              "type": "javascript",
+              "javascript": "result = _.get(data, 'isEntInstalled.isEnterprise', false);"
+            },
+            "actions": [
+              {
+                "name": "enable",
+                "type": "property",
+                "property": { "label": "Disabled", "value": "disabled", "type": "boolean" },
+                "state": "false"
+              }
+            ]
+          }
+        ],
+        "input": true
+      }
+
+  auto_number_with_generate:
+    description: "Number field with auto-generate checkbox — disabled when generate is checked"
+    example_number_field: |
+      {
+        "type": "textfield",
+        "key": "number",
+        "label": { "ru": "Номер", "en": "Number" },
+        "validate": { "required": true },
+        "calculateValue": "const formMode = _.get(instance, 'options.formMode');\nif (formMode !== 'CREATE') {\n  value = data._docNum;\n}",
+        "allowCalculateOverride": true,
+        "logic": [
+          {
+            "name": "generate_event",
+            "trigger": {
+              "type": "javascript",
+              "javascript": "const formMode = _.get(instance, 'options.formMode');\nresult = data.generate === true && formMode === 'CREATE';"
+            },
+            "actions": [
+              {
+                "name": "set_disabled_on",
+                "type": "property",
+                "property": { "label": "Disabled", "value": "disabled", "type": "boolean" },
+                "state": "true"
+              },
+              {
+                "name": "clear_value",
+                "type": "value",
+                "value": "value = null"
+              }
+            ]
+          }
+        ],
+        "input": true
+      }
+    example_generate_checkbox: |
+      {
+        "type": "checkbox",
+        "key": "generate",
+        "label": { "ru": "Генерировать", "en": "Generate" },
+        "customDefaultValue": "value = true;",
+        "customConditional": "show = instance.options.formMode === 'CREATE'",
+        "input": true
+      }
+
+  cascade_fill_from_parent:
+    description: >
+      When a parent record is selected, auto-fill child fields from it.
+      Uses asyncData to load parent attributes, then calculateValue to propagate values.
+    steps:
+      - "1. Add asyncData component that loads parent record attributes"
+      - "2. Set executionCondition to only load when parent is selected"
+      - "3. On child fields, use calculateValue with refreshOn to pick values from loaded data"
+      - "4. Add logic to disable child fields when values come from parent"
+
+  dependent_filter_via_related_record:
+    description: >
+      Filter a selection by a record the form does not hold but another selected record links to —
+      e.g. an activity form with only a «deal» field must offer the contact persons of the deal's
+      counterparty (contact.organization → counterparty, deal.counterparty → counterparty). The form
+      keeps only the record id of a selected value in data, so `_.get(data, "deal.counterparty")` is
+      always empty: load the linked record with a hidden asyncData component and filter by it.
+    example: |
+      {
+        "type": "asyncData",
+        "key": "dealRefs",
+        "source": {
+          "type": "record",
+          "record": { "id": "{{data.deal}}", "attributes": { "counterparty": "counterparty?id" } }
+        },
+        "update": { "type": "once" },
+        "refreshOn": [{ "label": "deal", "value": "deal" }],
+        "executionCondition": "value = !!_.get(data, 'deal');",
+        "input": true
+      }
+      placed like any asyncData (async_data above: a hidden columns section at the bottom), and on the dependent selectJournal:
+      "customPredicateJs": "value = { \"t\": \"eq\", \"att\": \"organization\", \"val\": _.get(data, \"dealRefs.counterparty\") }"
+
+# ============================================================================
+# BEST PRACTICES
+# ============================================================================
+best_practices:
+  layout:
+    - "Use panels to group logically related fields"
+    - "Use 2-column layout for compact forms"
+    - "Place required fields prominently"
+    - "Group dates together (startDate, endDate)"
+    - "NEVER place textarea inside columns — it must occupy full width. Place directly in panel.components"
+
+  ux:
+    - "Use clear, descriptive labels"
+    - "Provide placeholders for complex inputs"
+    - "Use tooltips for fields needing explanation"
+    - "Place action buttons at form bottom"
+    - "Use currentUserByDefault on performer/responsible person fields"

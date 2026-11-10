@@ -1,0 +1,146 @@
+# Compact reference of a Citeck record action (`uiserv/action`).
+#
+# Provenance: ecos-idea-plugin `citeck/artifacts/ui/action/action-schema.json` (23 KB) plus
+# `ActionRecords.ActionRecord` / `ActionDto` (ecos-uiserv) for the fields the schema omits
+# (`evaluator`, `result`). The FULL schema is what the validator checks against; this compact
+# derivative is what the prompt shows — 23 KB in every prompt prefix is exactly the cost
+# COREDEV-420 task 6 removed.
+#
+# An action is the BUTTON a record offers: in a journal row, on the record card, in a dashboard
+# widget. It is not a process and not a form — it names one operation and the configuration that
+# operation needs.
+
+type: object
+required:
+  - id
+  - name
+  - type
+  - typeRef
+properties:
+
+  id:
+    type: string
+    pattern: '^[a-zA-Z][a-zA-Z0-9_-]*$'
+    description: >-
+      Action id, kebab-case, starts with a letter. Convention: `<typeLocalId>-<verb>`
+      (`purchase-request-approve`, `contract-download-pdf`). On a MODIFICATION keep the existing id.
+
+  typeRef:
+    type: string
+    description: >-
+      The data type whose records this action acts on, e.g. `emodel/type@purchase-request`. The
+      deploy ADDS the action to that type's `actions` list — an action bound to nothing is a button
+      nobody ever sees. Copy the ref you were given; never invent it.
+
+  name:
+    description: Button label, i18n object. This is the text the user clicks.
+    type: object
+    properties:
+      ru: { type: string }
+      en: { type: string }
+
+  type:
+    type: string
+    description: >-
+      WHAT the action does. Pick from this list — an unknown value is rejected by the platform.
+      The common ones, with the `config` each needs:
+        view                  — open the record card. config: {background, reopen, newBrowserTab}
+        edit                  — open the edit form. config: {attributes: {<attId>: <value>}}
+        create                — create a record of a type. config: {typeRef, createVariantId, redirectToPage,
+                                attributes: {<attId of the CREATED type>: <value>}} — the values prefill the form of the
+                                new record; `${?id}` (or `${recordRef}`) is the FULL ref of the current record. `${id}`
+                                is only the bare uuid: a link field gets a broken ref `emodel/@<uuid>`.
+                                The creation form ALWAYS opens (ecos-ui `CreateAction`): the record is saved by the
+                                user's «Сохранить»; no config key creates a record without the form.
+        mutate                — write attributes onto the record WITHOUT a form.
+                                config: {record: {attributes: {<attId>: <value>}}}
+        delete                — delete the record. config: {isWaitResponse, withoutConfirm}
+        open-url              — open a URL. config: {url, newBrowserTab}
+        download              — download the record content. config: {url}
+        download-by-template  — render a document template. config: {templateRef, resultName}
+        transform             — convert the content. config: {input, transformations[], output}
+        fetch                 — call an HTTP endpoint. config: {url, method, args, body}
+        view-business-process — open the process diagram of the record
+        task-outcome          — complete the user task with an outcome
+      Also accepted: open-in-background, download-card-template, view-card-template,
+      upload-new-version, save-as-case-template, assoc-action, content-preview-modal,
+      cancel-business-process, edit-menu, view-menu, tasks-actions, edit-password,
+      open-submit-form, user-event.
+
+  icon:
+    type: string
+    description: 'Font Awesome class of the button icon, e.g. `icon-check`, `icon-download`.'
+
+  config:
+    type: object
+    additionalProperties: true
+    description: >-
+      Configuration of the chosen `type` — see the list above. Only the keys belonging to that type
+      are meaningful; a key from another type is ignored silently, so do not mix them.
+      ⚠️ Every attribute id inside `config.attributes` or `config.record.attributes` must be a REAL
+      attribute of the bound type: those keys are written onto the record.
+
+  predicate:
+    type: object
+    additionalProperties: true
+    description: >-
+      WHEN the button is shown. An ECOS predicate over the record, evaluated per row:
+        {"t": "eq", "att": "_status?str", "val": "approval"}
+        {"t": "and", "val": [{"t":"eq","att":"_status?str","val":"draft"},{"t":"not-empty","att":"performer"}]}
+      Status predicates use `_status?str` for the id; bare `_status` is the display name.
+      Every `att` must be a real attribute of the type (or a service attribute), and a `_status?str`
+      value must be a status the type actually has — an invented one hides the button forever.
+      Omit `predicate` when the action is always available.
+
+  confirm:
+    type: object
+    description: >-
+      Confirmation dialog before the action runs. `{title, message}` for a plain confirmation;
+      add `formRef` plus `formAttributes` / `attributesMapping` when the user must fill something in.
+      Use it for every DESTRUCTIVE or irreversible action.
+    properties:
+      title: { description: i18n object }
+      message: { description: i18n object }
+      formRef: { type: string, description: 'Ref of an EXISTING form, e.g. `uiserv/form@approve-form`' }
+      formAttributes: { type: object }
+      attributesMapping: { type: object }
+
+  features:
+    type: object
+    description: >-
+      Where the button may be invoked from. Missing flags are inferred from the UI handler;
+      explicit false disables a supported mode. `mutate` and `delete` support execForRecord and
+      execForRecords. The other built-in types above support one record only. None supports
+      execForQuery: never set it to true. Omit features unless you need to restrict execution.
+    properties:
+      execForRecord: { type: boolean, description: single record card / row }
+      execForRecords: { type: boolean, description: several selected rows }
+      execForQuery: { type: boolean, description: the whole filtered journal query }
+
+  key:
+    type: string
+    description: 'Dot-separated grouping key of the button in the UI, e.g. `documents.download`.'
+
+  timeoutErrorMessage:
+    description: i18n object shown when the action times out.
+
+  execForRecordsBatchSize:
+    type: integer
+    description: Batch size when the action runs over several records.
+
+  execForRecordsParallelBatchesCount:
+    type: integer
+    description: How many batches run in parallel.
+
+  preActionModule:
+    type: string
+    description: >-
+      Path of a JS module executed BEFORE the action. Executable code — it is shown in full on the
+      deploy-confirmation card. Do not invent module paths.
+
+  evaluator:
+    type: object
+    description: >-
+      Programmatic availability check, an alternative to `predicate` for logic a predicate cannot
+      express: `{id, type, inverse, config}`. A `config.fn` body is JavaScript and is shown in full
+      on the deploy-confirmation card. Prefer `predicate` — it is declarative and checkable.

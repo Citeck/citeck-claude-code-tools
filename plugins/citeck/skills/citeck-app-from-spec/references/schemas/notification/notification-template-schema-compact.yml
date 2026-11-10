@@ -1,0 +1,127 @@
+# Compact reference of the Citeck notification template (notifications/template).
+#
+# The full `notification-template-schema.json` (ecos-idea-plugin) describes the META object only —
+# what an app ships as `<id>.html.meta.yml`. The BODY of the notification lives beside it as a
+# Freemarker file per language (`<id>.html_ru.ftl`). Through the records API both halves travel in
+# ONE mutate (`bodyData: [{lang, body}]`), so the artifact the model generates is one JSON document
+# carrying the meta fields plus a `body` object keyed by language.
+#
+# Provenance: ecos-idea-plugin `citeck/artifacts/notification/template/notification-template-schema.json`
+# + `NotificationTemplateRecords` (ecos-notifications) for the `body` half.
+# `$process.<name>`: ecos-process `NotificationAdditionalMetaUtils` puts the process variables
+# themselves under `process`; `[]` = ecos-records `AttSchemaReader` multiple flag (without it the
+# resolver keeps the first value) — `D-FULL1014-R2A-LIST-OVER-SCALAR`.
+
+type: object
+required:
+  - id
+  - notificationTitle
+  - body
+properties:
+
+  id:
+    type: string
+    pattern: '^[a-zA-Z]([a-zA-Z0-9_-])*$'
+    description: >-
+      Template id, kebab-case, starts with a letter. Convention:
+      `<typeLocalId>-<event>-notification` (`purchase-request-approval-notification`).
+
+  name:
+    description: >-
+      Template name shown in the admin list. A PLAIN STRING, not an i18n object: the platform DTO
+      declares it as a string, and an object there fails deployment. Write it in Russian.
+    type: string
+
+  notificationTitle:
+    description: >-
+      Subject line of the notification, i18n object. Freemarker variables are allowed and must be
+      declared in `model`: `${number!""}`.
+    type: object
+    properties:
+      ru: { type: string }
+      en: { type: string }
+
+  model:
+    type: object
+    description: >-
+      Variables available inside `notificationTitle` and `body`. The KEY is the variable name used
+      in the template; the VALUE is an ECOS records expression evaluated against the document the
+      notification is about. EVERY `${var}` used in the title or the body MUST have a key here, and
+      every expression must address a REAL attribute of the bound type (or a service attribute).
+      Examples:
+        contract: "?disp"            # display name of the record
+        status: "_status"            # current status
+        docNum: "_docNum"
+        recordAuthor: "_creator"     # the author of the RECORD (who created it), NOT who performed the action
+        amount: "amount"
+        counterparty: "counterparty.fullOrganizationName"
+        date: "date|fmt('dd.MM.yyyy')"
+        docRef: "?id"
+        participants: "participants[]?disp"   # a LIST: every value of a multiple attribute
+        titles: "$process.overdueTitles[]"    # a LIST: a process variable that holds an array
+      An expression returns ONE value (the first of several) unless a path element carries `[]`;
+      only a `[]` expression is a list `<#list>` can walk over. `?id`, `?disp`, a plain attribute
+      and a quoted constant are single values.
+      Request-context objects usable in the model VALUES (expressions) and nowhere else: $now, $user,
+      $process.… (the last one only when the notification is sent from a BPMN process:
+      comment: "$process.comment" — a process variable is read by its name right after $process,
+      with no `variables.` in between). There is NO $webUrl anywhere — neither as a model
+      expression nor as a body variable. Inside the title and the body the ONLY undeclared names are
+      the platform beans `meta` and `link` (also `image`, `config`, `_workspace`): the portal address
+      is ${meta.getWebUrl()}, a link to the record is ${link.getRecordLink(docRef)} (with docRef: "?id"
+      declared in model). Never declare a model key with one of these names — it hides the bean and
+      is rejected. `${webUrl}` in the body breaks the rendering — the notification is never delivered.
+      link.getRecordLink already includes the portal address: it returns an absolute URL. Use
+      ${link.getRecordLink(docRef)} alone for the record link; never prefix it with ${meta.getWebUrl()}
+      or concatenate those calls, because that repeats the portal address.
+    additionalProperties: { type: string }
+
+  body:
+    type: object
+    description: >-
+      The notification body per language, Freemarker + HTML. `ru` is mandatory; add `en` when the
+      request is bilingual. Use `${var!""}` (with the default) so a missing value does not break
+      rendering. Keep the markup simple: <p>, <strong>, <br>, <a href="...">.
+    required: [ru]
+    properties:
+      ru: { type: string }
+      en: { type: string }
+
+  tags:
+    type: array
+    description: Free-form categorization tags. Usually an empty list.
+    items: { type: string }
+
+  multiTemplateConfig:
+    type: array
+    description: >-
+      Type-specific overrides — a different template for a different document type. Omit unless the
+      user explicitly asks for per-type variants.
+    items:
+      type: object
+      required: [template, type]
+      properties:
+        template: { type: string, description: 'notifications/template@<id>' }
+        type: { type: string, description: 'emodel/type@<id>' }
+        condition: { type: object, description: Additional predicate. }
+
+# Example:
+#
+# id: purchase-request-approval-notification
+# name: Уведомление о согласовании заявки
+# notificationTitle:
+#   ru: 'Заявка ${docNum!""}: ${status!""}'
+#   en: 'Request ${docNum!""}: ${status!""}'
+# model:
+#   docNum: "_docNum"
+#   status: "_status"
+#   recordAuthor: "_creator"
+#   amount: "amount"
+#   docRef: "?id"
+# body:
+#   ru: |
+#     <p>Добрый день!</p>
+#     <p>Заявка № ${docNum!""} на сумму ${amount!""} ожидает вашего согласования.</p>
+#     <p>Текущий статус: ${status!""}</p>
+#     <p>Автор заявки: ${recordAuthor!""}</p>
+# tags: []

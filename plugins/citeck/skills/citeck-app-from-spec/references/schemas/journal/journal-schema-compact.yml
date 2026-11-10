@@ -1,0 +1,157 @@
+# Compact reference of the Citeck journal artifact (uiserv/journal).
+#
+# Derived from the full `journal-schema.json` (38 KB, ecos-idea-plugin) the same way
+# `model-type-schema-compact.yml` is derived from the type schema: the full schema is what the
+# VALIDATOR reads, this file is what the PROMPT injects. Everything the generator does not need
+# (editor configs of every column type, action feature flags, the IntelliJ html descriptions) is
+# dropped; nothing that IS here contradicts the full schema.
+#
+# Provenance: ecos-idea-plugin `citeck/artifacts/ui/journal/journal-schema.json`.
+
+type: object
+required:
+  - id
+  - name
+  - typeRef
+  - columns
+properties:
+
+  id:
+    type: string
+    description: >-
+      Journal id, kebab-case. Convention: `<typeLocalId>-journal`
+      (type `purchase-request` → journal `purchase-request-journal`).
+
+  name:
+    description: Journal title, i18n object.
+    type: object
+    properties:
+      ru: { type: string }
+      en: { type: string }
+
+  typeRef:
+    type: string
+    description: >-
+      Ref of the data type whose records the journal lists, e.g. `emodel/type@purchase-request`.
+      Copy it EXACTLY from the input; never invent it.
+
+  sourceId:
+    type: string
+    description: Records source to query. Omit — it is derived from typeRef.
+
+  columns:
+    type: array
+    description: >-
+      Journal columns, in display order. EVERY column `id` must be an attribute id of the bound
+      type (own, inherited or aspect-provided) or one of the service attributes listed below.
+    items:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: Attribute id of the type, or a service attribute.
+        name:
+          description: Column header, i18n object. Omit to inherit the attribute's own name.
+          type: object
+          properties:
+            ru: { type: string }
+            en: { type: string }
+        type:
+          type: string
+          enum: [TEXT, MLTEXT, NUMBER, BOOLEAN, DATE, DATETIME, CONTENT, ASSOC, PERSON, AUTHORITY, AUTHORITY_GROUP]
+          description: Column data type — must match the attribute's type in the type model.
+        attribute:
+          type: string
+          description: Attribute expression to load when it differs from the column id (rare).
+        visible:
+          type: boolean
+          default: true
+          description: false hides the column from the default view but keeps it filterable.
+        searchable: { type: boolean, default: true }
+        sortable: { type: boolean, default: true }
+        groupable: { type: boolean, default: true }
+        editable:
+          type: boolean
+          default: false
+          description: Inline editing of this column in the list.
+
+  actions:
+    type: array
+    description: >-
+      Refs of EXISTING record actions, e.g. `uiserv/action@edit`. Only refs — an action definition
+      of your own is NOT generated here. Common platform actions:
+      `uiserv/action@view-dashboard`, `uiserv/action@edit`, `uiserv/action@delete`,
+      `uiserv/action@download-text-yml`, `uiserv/action@print`.
+    items: { type: string }
+
+  actionsFromType:
+    type: boolean
+    description: Include the actions declared by the type itself. Usually true.
+
+  predicate:
+    type: object
+    description: >-
+      Default filter, ECOS predicate format. Attributes named here follow the same rule as columns —
+      they must exist on the type.
+      Example: { "t": "eq", "att": "_status", "val": "new" }
+      ⚠️ `t` is one of: and, or, not, eq, gt, ge, lt, le, like, in, contains, empty, starts, ends —
+      lower case, nothing else. The platform reads any other type (`ne`, `nin`, `IN`) as «no record
+      matches» and a condition without `t` as «every record matches»; under `not` each turns into the
+      opposite. Either way the filter is not the one written — such a draft is refused. Negation is a `not` over ONE
+      condition: { "t": "not", "val": { "t": "in", "att": "_status", "val": ["done", "cancelled"] } }.
+
+  defaultSortBy:
+    type: array
+    description: Default sorting.
+    items:
+      type: object
+      required: [attribute]
+      properties:
+        attribute: { type: string, description: Attribute id to sort by. }
+        ascending: { type: boolean, default: true }
+
+  groupBy:
+    type: array
+    description: Attribute ids to group rows by. Usually omitted.
+    items: { type: string }
+
+# Service attributes every record has. They are NOT in the type model, and they ARE legitimate
+# column ids / predicate attributes:
+#   _created (DATETIME), _modified (DATETIME), _creator (PERSON), _modifier (PERSON),
+#   _statusModified (DATETIME — when the record entered its current status: the date of entering the stage),
+#   _disp (TEXT — the record title), _status (TEXT — the status), _type, _docNum, _localId,
+#   _workspace, _content.
+#   _stage (TEXT — the stage) exists ONLY on a type that declares stages (`model.stages` in its
+#   definition); on a type without stages it is refused — the column would always be empty.
+
+# Example (an inbound-contract journal, shortened):
+#
+# id: ecos-inbound-contract-journal
+# name:
+#   ru: Договоры
+#   en: Inbound contracts
+# typeRef: emodel/type@ecos-inbound-contract
+# actions:
+#   - uiserv/action@edit
+#   - uiserv/action@view-dashboard
+# columns:
+#   - id: _created
+#     name: { ru: Дата создания, en: Created date }
+#     type: DATETIME
+#   - id: _disp
+#     name: { ru: Заголовок, en: Title }
+#     type: TEXT
+#   - id: _status
+#     type: TEXT
+#   - id: counterparty
+#     type: ASSOC
+#   - id: amount
+#     name: { ru: Сумма договора, en: Contract value }
+#     type: NUMBER
+#   - id: date
+#     name: { ru: Дата договора, en: Contract date }
+#     type: DATE
+# defaultSortBy:
+#   - attribute: _created
+#     ascending: false

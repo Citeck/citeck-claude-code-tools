@@ -1,0 +1,504 @@
+$schema: "http://json-schema.org/draft-07/schema#"
+title: "Citeck Model Type Schema"
+description: "Schema for Citeck model/type YAML files"
+type: object
+required:
+  - id
+
+# Общие определения
+definitions:
+  nameMlText: &nameMlText
+    type: object
+    description: Мультиязычное имя — объект {ru, en}, не строка
+    minProperties: 1
+    properties:
+      ru:
+        type: string
+        description: Русское имя
+      en:
+        type: string
+        description: Английское имя
+
+  descriptionMlText: &descriptionMlText
+    oneOf:
+      - type: string
+        description: Простое описание
+      - type: object
+        description: Мультиязычное описание
+        minProperties: 1
+        properties:
+          ru:
+            type: string
+            description: Русское описание
+          en:
+            type: string
+            description: Английское описание
+
+  modelAttributesItems: &modelAttr
+    type: object
+    required: [id]
+    properties:
+      id:
+        type: string
+        description: Идентификатор (camelCase)
+        pattern: '^[\w$/_-]+\w$'
+      name:
+        <<: *nameMlText
+      type:
+        type: string
+        description: >-
+          Тип атрибута. Файл (вложение, скан, документ) — это CONTENT: файл, приложенный на форме, платформа сохраняет
+          только в CONTENT, в BINARY он не записывается, поэтому BINARY для файла не используется (код заменит его на
+          CONTENT). CONTENT хранит один файл — multiple для него не ставится.
+        enum: [TEXT, MLTEXT, NUMBER, BOOLEAN, DATE, DATETIME, CONTENT, JSON, BINARY, ASSOC, PERSON, AUTHORITY, AUTHORITY_GROUP, OPTIONS]
+      multiple:
+        type: boolean
+        description: Множественное значение?
+      mandatory:
+        type: boolean
+        description: Обязательное поле?
+      config:
+        type: object
+        description: Настройки атрибута
+        properties:
+          source:
+            type: string
+            enum: [values]
+            default: values
+            description: Откуда брать опции (OPTIONS)
+          values:
+            type: array
+            description: Список значений (OPTIONS)
+            minItems: 1
+            items:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: string
+                  pattern: '^[\w$/_-]+\w$'
+                  description: Внутреннее значение
+                label:
+                  <<: *nameMlText
+          typeRef:
+            type: string
+            description: Ссылка на тип (ASSOC)
+          child:
+            type: boolean
+            description: Дочерняя связь? (ASSOC)
+          unique:
+            type: boolean
+            description: Уникальное значение? (TEXT)
+      computed:
+        type: object
+        description: Настройка вычисляемого атрибута
+        required: [type, config]
+        properties:
+          type:
+            type: string
+            description: Тип вычисления
+            enum: [NONE, ATTRIBUTE, SCRIPT, VALUE, COUNTER, TEMPLATE]
+          config:
+            type: object
+            description: Конфиг вычисления
+            properties:
+              attribute:
+                type: string
+                description: Исходный атрибут (ATTRIBUTE)
+              fn:
+                type: string
+                description: >-
+                  JS-функция (SCRIPT). Движок GraalJS (ECMAScript 2023) БЕЗ доступа к Java:
+                  java.*, javax.*, Packages.*, Java.type не существуют. Привязаны только value
+                  (только чтение: load/reset/getId/getRef/getLocalId) и Records (get/query/queryOne);
+                  value.att(...) и value.save() пишут запись и здесь всегда падают, читать
+                  поле — value.load('<атрибут>'); текущий момент — new Date()
+              value:
+                type: string
+                description: Постоянное значение (VALUE)
+              template:
+                type: string
+                description: Шаблон строки (TEMPLATE)
+              numTemplateRef:
+                type: string
+                description: Ссылка на шаблон счетчика (COUNTER)
+          storingType:
+            type: string
+            description: >-
+              Когда вычислять и сохранять. NONE (по умолчанию) — при каждом чтении, не сохраняется;
+              ON_CREATE — один раз при создании записи; ON_EMPTY — при сохранении, пока поле пустое, дальше
+              значение хранится; ON_MUTATE — при каждом сохранении. Дату однократного события (отправка,
+              закрытие) и значение по умолчанию вычислять с ON_EMPTY — с NONE и ON_MUTATE дата становится «сейчас»,
+              а ON_CREATE при создании записи пишет вычисленное значение поверх введённого. Скрипт даты однократного
+              события возвращает дату только на статусе этого события, а до него null: безусловный «return new Date()»
+              с ON_EMPTY срабатывает при первом сохранении и пишет дату создания. Дата входа на текущий
+              этап — не однократное событие: ON_EMPTY навсегда оставит первое значение. Её ведёт сама платформа
+              в системном атрибуте _statusModified, своё поле для неё не заводить
+            enum: [NONE, ON_CREATE, ON_EMPTY, ON_MUTATE]
+
+# Корневые свойства
+properties:
+  id:
+    type: string
+    description: Уникальный идентификатор
+    pattern: '^[A-Za-z][A-Za-z0-9_-]*$'
+
+  name:
+    <<: *nameMlText
+
+  description:
+    <<: *descriptionMlText
+
+  system:
+    type: boolean
+    description: Системный тип?
+    default: false
+
+  sourceId:
+    type: string
+    description: Источник данных
+    pattern: '^[A-Za-z][A-Za-z0-9/_-]*$'
+
+  storageType:
+    type: string
+    description: Тип хранилища
+    enum: [DEFAULT, ECOS_MODEL, ALFRESCO]
+    default: ECOS_MODEL
+
+  parentRef:
+    type: string
+    description: Родительский тип
+    examples: [emodel/type@case, emodel/type@data-list]
+    anyOf:
+      - enum: [emodel/type@case, emodel/type@data-list, emodel/type@document, emodel/type@doclib-file, emodel/type@publication]
+      - pattern: '.*'
+
+  formRef:
+    type: string
+    description: Ссылка на форму
+    default: uiserv/form@DEFAULT_FORM
+    examples: [uiserv/form@hr-offices-form]
+
+  journalRef:
+    type: string
+    description: Ссылка на журнал
+    default: uiserv/journal@DEFAULT_JOURNAL
+
+  boardRef:
+    type: string
+    description: Ссылка на kanban-доску
+    examples: [uiserv/board@hr-offices-board]
+
+  dashboardType:
+    type: string
+    description: Тип дашборда
+    enum: [case-details, profile-details, site-details, publication-details, wiki]
+
+  defaultStatus:
+    type: string
+    description: Статус по умолчанию
+
+  dispNameTemplate:
+    type: object
+    description: Мультиязычный шаблон отображения. В шаблоне могут использоваться только переменные из model.attributes
+    minProperties: 1
+    properties:
+      ru:
+        type: string
+        description: Русский шаблон
+        examples: ["${counter} - ${title}"]
+      en:
+        type: string
+        description: Английский шаблон
+
+  inheritForm:
+    type: boolean
+    description: Наследовать форму?
+    default: false
+
+  inheritActions:
+    type: boolean
+    description: Наследовать действия?
+    default: false
+
+  inheritNumTemplate:
+    type: boolean
+    description: Наследовать шаблон номера?
+    default: false
+
+  numTemplateRef:
+    type: string
+    description: Ссылка на шаблон номера
+
+  defaultCreateVariant:
+    type: boolean
+    description: >-
+      Вариант создания по умолчанию (кнопка «Создать» в журнале, пункт меню, кнопка в окне выбора). Обычно не
+      указывай: без ключа платформа сама добавляет вариант создания, если у типа нет своих createVariants и есть
+      форма. Значение false без своих createVariants убирает создание записей из интерфейса везде, поэтому у нового
+      типа код снимает false. Кто может создавать записи, решает матрица прав, а не этот флаг.
+
+  createVariantsForChildTypes:
+    type: boolean
+    description: Добавлять варианты создания дочерних типов?
+    default: false
+
+  queryPermsPolicy:
+    type: string
+    description: >-
+      Политика проверки прав при поиске записей. Обычно не указывай: DEFAULT берёт политику родительского типа,
+      в итоге проверяются права самой записи. PARENT проверяет права родительской записи (_parent) и допустим,
+      только если записи этого типа создаются дочерними: какой-то тип (или этот же) объявляет на этот тип
+      ассоциацию ASSOC с config.child: true. Обычная ссылка (child: false) родителем запись не делает; без
+      дочерней связи у записи нет родителя, поиск ничего не находит, и код убирает PARENT.
+    enum: [PUBLIC, OWN, PARENT, NONE, DEFAULT]
+    default: DEFAULT
+
+  workspaceScope:
+    type: string
+    description: Видимость пространства
+    enum: [PUBLIC, PRIVATE, DEFAULT]
+    default: DEFAULT
+
+  defaultWorkspace:
+    type: string
+    description: Пространство по умолчанию
+
+  postCreateActionRef:
+    type: string
+    description: Действие после создания
+    anyOf:
+      - enum: [uiserv/action@none]
+      - pattern: '.*'
+
+  configFormRef:
+    type: string
+    description: Ссылка на доп. форму конфигурации
+
+  actions:
+    type: array
+    description: Список действий
+    items:
+      type: string
+      anyOf:
+        - enum:
+            - uiserv/action@view-dashboard
+            - uiserv/action@view-dashboard-in-background
+            - uiserv/action@edit
+            - uiserv/action@edit-in-onlyoffice-tfm
+            - uiserv/action@edit-json
+            - uiserv/action@delete
+            - uiserv/action@upload-new-version
+            - uiserv/action@content-download
+            - uiserv/action@download-text-yml
+            - uiserv/action@tasks-actions
+            - uiserv/action@print
+        - pattern: '.*'
+
+  assignablePerms:
+    type: array
+    description: Разрешения для назначения
+    items:
+      type: string
+
+  createVariants:
+    type: array
+    description: Варианты создания
+    items:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: Идентификатор варианта
+          pattern: '^[\w$/\.-]+\w$'
+        name:
+          <<: *nameMlText
+        formRef:
+          type: string
+          description: Ссылка на форму варианта
+        allowedFor:
+          type: array
+          description: Разрешено для (GROUP_..., user.id)
+          items:
+            type: string
+        attributes:
+          type: object
+          description: Доп. атрибуты при создании
+        formOptions:
+          type: object
+          description: Настройки формы создания
+        postActionRef:
+          type: string
+          description: Действие после создания с вариантом
+          anyOf:
+            - enum: [uiserv/action@none]
+            - pattern: '.*'
+        sourceId:
+          type: string
+          description: Источник данных варианта
+          pattern: '^[A-Za-z][A-Za-z0-9/_-]*$'
+
+  associations:
+    type: array
+    description: Связи
+    items:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: Идентификатор связи
+          pattern: '^[\w$/:-]+\w$'
+        name:
+          <<: *nameMlText
+        attribute:
+          type: string
+          description: Атрибут для загрузки/добавления связей
+          pattern: '^[\w$/:-]+\w$'
+        target:
+          type: string
+          description: Целевой тип для связи
+        journalsFromTarget:
+          type: boolean
+          description: Использовать журналы таргета?
+        journals:
+          type: array
+          description: Журналы для создания связи
+          items:
+            type: string
+        direction:
+          type: string
+          description: Направление связи
+          enum: [BOTH, TARGET, SOURCE]
+
+model:
+  type: object
+  description: Модель (атрибуты, роли, статусы, этапы)
+  properties:
+    attributes:
+      type: array
+      description: Поля модели (наследуются)
+      items:
+        <<: *modelAttr
+    systemAttributes:
+      type: array
+      description: Системные поля модели
+      items:
+        <<: *modelAttr
+    roles:
+      type: array
+      description: Роли
+      items:
+        type: object
+        required: [id]
+        properties:
+          id:
+            type: string
+            description: Идентификатор роли
+            pattern: '^[\w$/_-]+\w$'
+          name:
+            <<: *nameMlText
+          assignees:
+            type: array
+            description: Статические назначения
+            items:
+              type: string
+          attributes:
+            type: array
+            description: Атрибуты для динамического назначения
+            items:
+              type: string
+          computed:
+            type: object
+            description: Вычисляемая конфигурация роли
+            required: [type, config]
+            properties:
+              type:
+                type: string
+                enum: [NONE, SCRIPT, ATTRIBUTE, VALUE, DMN]
+              config:
+                type: object
+                properties:
+                  attribute:
+                    type: string
+                    description: Атрибут для ATTRIBUTE
+                  fn:
+                    type: string
+                    description: JS-функция для SCRIPT
+                  value:
+                    type: string
+                    description: Постоянное значение
+                  decisionRef:
+                    type: string
+                    description: Ссылка на DMN-решение
+    statuses:
+      type: array
+      description: Статусы
+      items:
+        type: object
+        required: [id, name]
+        properties:
+          id:
+            type: string
+            description: Идентификатор статуса
+            pattern: '^[\w$/_-]+\w$'
+          name:
+            <<: *nameMlText
+    stages:
+      type: array
+      description: Этапы процесса
+      items:
+        type: object
+        required: [name, statuses]
+        properties:
+          name:
+            <<: *nameMlText
+          statuses:
+            type: array
+            description: Статусы этапа
+            items:
+              type: string
+              pattern: '^[\w$/_-]+\w$'
+
+config:
+  type: object
+  description: Дополнительная конфигурация (через configFormRef)
+
+docLib:
+  type: object
+  description: Конфигурация библиотек документов
+
+contentConfig:
+  type: object
+  description: Конфигурация контента (наследуется)
+  properties:
+    path:
+      type: string
+      description: Путь к атрибуту с основным документом
+    previewPath:
+      type: string
+      description: Путь к атрибуту для превью
+    storageRef:
+      type: string
+      description: Ссылка на хранилище контента
+    storageConfig:
+      type: object
+      description: Настройки хранилища контента
+
+aspects:
+  type: array
+  description: Аспекты (наследуются)
+  items:
+    type: object
+    required: [ref]
+    properties:
+      ref:
+        type: string
+        description: Ссылка на аспект
+      config:
+        type: object
+        description: Конфигурация аспекта
+      inheritConfig:
+        type: boolean
+        description: Наследовать конфиг аспекта?

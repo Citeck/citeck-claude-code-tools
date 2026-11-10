@@ -1,0 +1,85 @@
+# Compact reference of Citeck record permission settings (`emodel/permission-settings`).
+#
+# Provenance: `PermissionSettingsDto` / `PermissionSettingsConfig` (ecos-model) and the real
+# artifacts of the business applications (`sd-process-run-permission.yml`,
+# `bpmn-section-root-settings.yml`). This kind ships no schema in ecos-idea-plugin, so the
+# structural schema beside this file is hand-authored from the same sources.
+#
+# ## What this artifact is FOR
+#
+# Type permissions (`emodel/perms`) answer «who may read/write records OF A TYPE». THIS artifact
+# answers «who may do a named operation ON ONE CONCRETE RECORD» — and the operation is not
+# necessarily read/write: the platform ships permission definitions such as
+# `bpmn-process-instance-run`.
+#
+# Its most important use: a generated BPMN process is a record (`eproc/bpmn-def@…`) that NOBODY may
+# start until someone is granted `emodel/permission-def@bpmn-process-instance-run` on it.
+
+type: object
+required:
+  - id
+  - recordRef
+  - settings
+properties:
+
+  id:
+    type: string
+    description: >-
+      Settings id. Convention: `<recordLocalId>-run-permission` for a process-start grant
+      (`purchase-request-process-run-permission` for `eproc/bpmn-def@purchase-request-process`). On a
+      MODIFICATION keep the existing id.
+
+  recordRef:
+    type: string
+    description: >-
+      The record the permissions are granted ON — a full ref, e.g. `eproc/bpmn-def@purchase-request`.
+      It must be a record that EXISTS: a grant on a non-existent ref is accepted by the store and
+      protects nothing. Copy the ref the inputs give; never invent it.
+
+  inherit:
+    type: boolean
+    description: >-
+      `true` — these grants are ADDED to whatever the record's type already computes.
+      `false` — these grants are the whole truth for this record. Real process-start artifacts use
+      `false`; use `true` only when the request is explicitly «дополнительно к обычным правам».
+
+  version:
+    type: integer
+    description: >-
+      Do NOT set it yourself. The platform silently DISCARDS an update whose version is not greater
+      than the stored one, so the deploy reads the current version and bumps it.
+
+  settings:
+    type: array
+    minItems: 1
+    description: One entry per group of grantees. At least one entry — an empty list grants nothing.
+    items:
+      type: object
+      required: [permissions]
+      properties:
+
+        permissions:
+          type: array
+          description: >-
+            Refs of permission definitions (`emodel/permission-def@<id>`). The ones that matter here:
+              emodel/permission-def@read                        — read the record
+              emodel/permission-def@write                       — modify the record
+              emodel/permission-def@bpmn-process-instance-run   — START this process
+              emodel/permission-def@bpmn-process-instance-read  — see its instances
+              emodel/permission-def@bpmn-process-def-deploy     — deploy a new version of it
+            An invented permission id grants nothing; use only ids that exist on the stand.
+
+        authorities:
+          type: array
+          description: >-
+            WHO the permissions are granted to, by authority name:
+              GROUP_EVERYONE          — every authenticated user
+              GROUP_<name>            — a concrete group (`GROUP_bp-manager`)
+              <login>                 — one user
+            This is the field real artifacts use.
+
+        roles:
+          type: array
+          description: >-
+            Role ids of the record's type, when the grant follows a role rather than a group.
+            Real artifacts leave it empty — prefer `authorities` unless the request names a role.

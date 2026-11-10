@@ -50,7 +50,7 @@ for (const [label, source] of [
     const loader = new DefaultResourceLoader({ cwd, agentDir });
     await loader.reload();
     assert.deepEqual(loader.getExtensions().errors, []);
-    assert.equal(loader.getSkills().skills.filter(s => s.name.startsWith("citeck-")).length, 5);
+    assert.equal(loader.getSkills().skills.filter(s => s.name.startsWith("citeck-")).length, 6);
     assert.ok(loader.getExtensions().extensions.some(e => e.tools.has("citeck_auth")));
     const registration = loader.getExtensions().runtime.mcpServers.get("citeck");
     assert.equal(registration.config.cwd, resolve(new URL("../../", import.meta.url).pathname) + "/");
