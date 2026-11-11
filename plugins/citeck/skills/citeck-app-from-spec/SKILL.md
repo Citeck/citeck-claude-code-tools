@@ -1,6 +1,6 @@
 ---
 name: citeck-app-from-spec
-description: "Build a new Citeck ECOS application from a requirements document (ТЗ): plan, write ecos-apps artifact files, check BPMN with the platform, deploy into one workspace, walk the main scenario on the stand, fix and redeploy in a loop, and report requirement by requirement. Use when asked to create or generate an application, business app or process automation from a spec on a Citeck stand."
+description: "EXPERIMENTAL (stage-1 prototype; the result is checked through Records API, a working UI is not guaranteed). Build a new Citeck ECOS application from a requirements document (ТЗ): plan, write ecos-apps artifact files, check BPMN with the platform, deploy into one workspace, walk the main scenario on the stand, fix and redeploy in a loop, and report requirement by requirement. Use when asked to create or generate an application, business app or process automation from a spec on a Citeck stand."
 allowed-tools: >-
   AskUserQuestion,
   Read,
@@ -17,6 +17,15 @@ allowed-tools: >-
   mcp__plugin_citeck_citeck__search_docs,
   mcp__plugin_citeck_citeck__list_profiles
 ---
+
+## Status: experimental
+
+This skill is a stage-1 prototype and is not developed further as an application generator. In the two measured runs
+on a CRM requirements document the main scenario worked through Records API in one of them, and in neither did the
+application work in the browser: the create form had no save button and the task showed no outcome buttons. Tell the
+user this before starting, and always check the create form and the first task in the browser before reporting the
+application as working. The tools `deploy_app`, `bpmn_validate` and `bpmn_layout` and the reference files are stable
+and can be used on their own.
 
 ## Client compatibility
 
@@ -143,7 +152,10 @@ comments and buttons, so a requirement about them is not checked until it is see
 Only if the search finds no browser tool, say so in the report.
 
 Each found difference from the ТЗ: change the artifact file, `deploy_app` again, repeat the step.
-Stop when the main scenario passes or the run limit is reached.
+Stop when the main scenario passes or the run limit is reached. A main scenario that does not pass is
+not a reason to finish: while the limit is not reached, find the cause («The process did not start, or
+a task did not appear» in `stand-actions.md`), fix, deploy, repeat. Finish with a failing main
+scenario only at the limit, and then say so in the first line of the report.
 
 ### 6. Journal
 After every loop iteration append to `LOOP-JOURNAL.md` in the application directory:

@@ -32,6 +32,21 @@ a local stand on 2026-11-10 (run `pi-run1`); `<sys>` is `workspace_system_id` fr
 - Records API completion bypasses the task form: required fields, `commentRequired`, buttons. Check
   those in the browser.
 
+## The process did not start, or a task did not appear
+
+A process that throws in a script or service task right after its start leaves no task, and its error
+is **not** in the `ecos-apps` log that `deploy_app` reads: the start is retried in the background and
+fails again (seen 2026-11-10, run `pi-crm1`).
+
+- When: a record is created and ~30 s later it has no open task where the process should have made
+  one, or the status and fields the process sets are unchanged.
+- Read the error: `records_query` on source `eproc/bpmn-delayed-start-cmd`, language `predicate`,
+  query `{"t": "eq", "a": "businessKey", "v": "<record ref>"}`, attributes `lastError?str`,
+  `_created?str`. `lastError` is the exception text of the failed step: fix that step in the process
+  file, `bpmn_validate`, `bpmn_layout`, `deploy_app`, then create a **new** record and check again.
+- Nothing found there and still no task: check that the process is enabled, starts automatically and
+  is bound to your type.
+
 ## Browser (Playwright MCP)
 
 In Pi the browser tools are deferred like the Citeck ones: find them with `tool_search`
@@ -46,6 +61,9 @@ the report without that search.
 - Pages: journal `/v2/journals?ws=<ws>&journalId=<sys>:<journal-id>`; record card
   `/v2/dashboard?recordRef=<record ref>&ws=<ws>`; the user's open tasks `/v2/journals?ws=<ws>&journalId=bpmn-active-tasks`.
 - One `browser_snapshot` per screen state; `browser_find` for a single check.
+- An empty snapshot (empty accessibility tree) does not mean an empty page: wait (`browser_wait_for`),
+  take a `browser_take_screenshot` and snapshot again before writing «the page is empty»
+  (run `pi-crm1`: a rendered page was reported as empty this way).
 - After each screen: `browser_console_messages` (level error) and `browser_network_requests`; report the
   errors of your pages. The local stand may show unrelated errors (an unavailable `integrations` app,
   the AI assistant endpoint) — name them as such.

@@ -227,6 +227,12 @@ def test_artifact_patch_must_apply_in_the_workspace(app_dir, content, refused):
     ("type: mutate\nrecords:\n  - id: uiserv/form@CURRENT_WS:deal-form\n", False),
     (f"type: mutate\nrecords:\n  - id: emodel/{WS}:stage@\n    attributes: {{name: x}}\n", False),
     ("type: mutate\nrecords:\n  - id: emodel/person@fet\n", False),
+    ("type: mutate\nrecords:\n  - id: emodel/workspace-member@\n    attributes: {_parent: emodel/workspace@other-ws}\n",
+     True),
+    (f"type: mutate\nrecords:\n  - id: emodel/workspace-member@\n    attributes: {{_parent: emodel/workspace@{WS}}}\n",
+     False),
+    ("type: mutate\nrecords:\n  - id: emodel/workspace@other-ws\n    attributes: {name: x}\n", True),
+    (f"type: mutate\nrecords:\n  - id: emodel/{WS}:deal@\n    attributes: {{_parent: emodel/{WS}:deal@1}}\n", False),
 ])
 def test_patch_may_touch_only_the_workspace(app_dir, content, refused):
     (app_dir / "artifacts/app/patch").mkdir(parents=True)
@@ -557,6 +563,53 @@ def test_every_deploy_makes_its_own_commit(app_dir, stand):
     log = subprocess.run(["git", "log", "--format=%s"], cwd=app_dir, capture_output=True, text=True).stdout.splitlines()
     assert log[0].startswith(f"deploy {APP} ") and log[0].endswith(": unchanged, 0 changed, 0 failed [confirmed]")
     assert log[1].endswith(": deployed, 1 changed, 0 failed [confirmed]")
+
+
+def test_deploy_commit_does_not_carry_changes_staged_outside_the_app(app_dir, stand):
+    repo = app_dir.parent
+    _git("init", "-q", cwd=repo)
+    _git("config", "user.email", "t@example.invalid", cwd=repo)
+    _git("config", "user.name", "t", cwd=repo)
+    (repo / "other.txt").write_text("not part of the application\n")
+    _git("add", "other.txt", cwd=repo)
+    stand(artifacts=[_art("model/type$deal", "DEPLOYED")])
+    with _with_log(UPLOAD_CHANGED + [START, *_deployed("model/type$deal")]):
+        result = app_deploy.deploy(str(app_dir), workspace=WS)
+    assert "outside the application directory" in result["commit"]["error"]
+    assert "other.txt" in result["commit"]["error"]
+    log = subprocess.run(["git", "log", "--format=%s"], cwd=repo, capture_output=True, text=True)
+    assert log.stdout.strip() == ""
+
+
+def test_staged_change_outside_the_app_is_seen_with_relative_diff_configured(app_dir, stand):
+    repo = app_dir.parent
+    _git("init", "-q", cwd=repo)
+    _git("config", "user.email", "t@example.invalid", cwd=repo)
+    _git("config", "user.name", "t", cwd=repo)
+    _git("config", "diff.relative", "true", cwd=repo)
+    (repo / "other.txt").write_text("not part of the application\n")
+    _git("add", "other.txt", cwd=repo)
+    stand(artifacts=[_art("model/type$deal", "DEPLOYED")])
+    with _with_log(UPLOAD_CHANGED + [START, *_deployed("model/type$deal")]):
+        result = app_deploy.deploy(str(app_dir), workspace=WS)
+    assert "other.txt" in result["commit"]["error"]
+
+
+def test_file_moved_into_the_app_from_outside_is_not_committed_as_a_deletion_outside(app_dir, stand):
+    repo = app_dir.parent
+    _git("init", "-q", cwd=repo)
+    _git("config", "user.email", "t@example.invalid", cwd=repo)
+    _git("config", "user.name", "t", cwd=repo)
+    (repo / "notes.md").write_text("a file of the surrounding repository\n" * 20)
+    _git("add", "notes.md", cwd=repo)
+    _git("commit", "-q", "-m", "base", cwd=repo)
+    _git("mv", "notes.md", "app/notes.md", cwd=repo)
+    stand(artifacts=[_art("model/type$deal", "DEPLOYED")])
+    with _with_log(UPLOAD_CHANGED + [START, *_deployed("model/type$deal")]):
+        result = app_deploy.deploy(str(app_dir), workspace=WS)
+    assert "notes.md" in result["commit"]["error"]
+    log = subprocess.run(["git", "log", "--format=%s"], cwd=repo, capture_output=True, text=True)
+    assert log.stdout.splitlines() == ["base"]
 
 
 def test_no_git_no_commit(app_dir, stand):

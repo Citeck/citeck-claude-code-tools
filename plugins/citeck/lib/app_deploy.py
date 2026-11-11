@@ -71,6 +71,8 @@ _EMODEL_TYPE_OUTSIDE_RE = re.compile(r"emodel/type@(?!CURRENT_WS:)[A-Za-z0-9_$:.
 _REF_RE = re.compile(
     r"\b(?P<src>[a-z][a-z0-9-]*/(?:(?P<srcws>[A-Za-z0-9_-]+):)?[a-z][a-z0-9-]*)@(?P<local>[A-Za-z0-9_$:.-]*)")
 
+_WORKSPACE_REF = "emodel/workspace@"
+
 _SKIP_NAMES = {".git", ".DS_Store", "__MACOSX", ".citeck-deploy"}
 
 
@@ -164,8 +166,12 @@ def _patch_targets(data) -> tuple[list[str], list[str]]:
             refs.append(str(record["id"]))
         attributes = record.get("attributes") if isinstance(record.get("attributes"), dict) else {}
         for key, value in attributes.items():
-            if key.split("?", 1)[0] == "_workspace" and value:
+            name = key.split("?", 1)[0]
+            if name == "_workspace" and value:
                 workspaces.append(str(value).split("@", 1)[-1])
+            elif name == "_parent" and str(value).startswith(_WORKSPACE_REF):
+                # A record whose parent is a workspace (a member, for one) lands in that workspace.
+                workspaces.append(str(value)[len(_WORKSPACE_REF):])
     return refs, workspaces
 
 
@@ -201,8 +207,11 @@ def check_artifact_scope(app_dir: str, ws_ids: set[str] | None = None) -> list[s
         refs, workspaces = _patch_targets(data)
         for ws in workspaces:
             if ws not in ws_ids:
-                problems.append(f"{rel}: _workspace {ws} is not this workspace.")
+                problems.append(f"{rel}: workspace {ws} (in _workspace or _parent) is not this workspace.")
         for target in refs:
+            if target.startswith(_WORKSPACE_REF) and target[len(_WORKSPACE_REF):] not in ws_ids:
+                problems.append(f"{rel}: {target} is another workspace; a patch may change only this one.")
+                continue
             match = _REF_RE.search(target)
             if not match:
                 continue
@@ -718,6 +727,17 @@ def commit_app_dir(app_dir: str, message: str) -> dict | None:
         staged = subprocess.run([git, "-C", app_dir, "diff", "--cached", "--quiet", "--", "."],
                                 capture_output=True, text=True, timeout=30)
         files_changed = staged.returncode != 0
+        # The directory may sit inside a bigger repository: a deploy commit must not carry what the
+        # user staged elsewhere in it.
+        # --no-relative: `diff.relative=true` would hide every path outside the directory;
+        # --no-renames: a rename from outside into the directory must show its source path too.
+        listing = [git, "-C", app_dir, "diff", "--cached", "--name-only", "--no-relative", "--no-renames"]
+        everything = subprocess.run(listing, capture_output=True, text=True, timeout=30, check=True)
+        own = subprocess.run(listing + ["--", "."], capture_output=True, text=True, timeout=30, check=True)
+        foreign = sorted(set(everything.stdout.splitlines()) - set(own.stdout.splitlines()))
+        if foreign:
+            return {"error": "No deploy commit: the repository has staged changes outside the application "
+                             f"directory ({', '.join(foreign[:5])}). Commit or unstage them."}
         done = subprocess.run([git, "-C", app_dir, "commit", "-q", "--allow-empty", "-m", message],
                               capture_output=True, text=True, timeout=30)
         if done.returncode != 0:
