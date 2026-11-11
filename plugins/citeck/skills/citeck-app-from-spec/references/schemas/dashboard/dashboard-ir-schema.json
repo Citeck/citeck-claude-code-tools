@@ -1,0 +1,236 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Citeck Dashboard IR Schema",
+  "description": "Intermediate representation of a Citeck record dashboard. The MODEL writes this; CODE compiles it into the platform `config.v2` (widget registry + desktop/mobile layouts with generated ids). The platform format is never authored by the model — see DashboardIrCompiler.",
+  "type": "object",
+  "required": [
+    "id",
+    "typeRef",
+    "tabs"
+  ],
+  "definitions": {
+    "mlText": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "ru": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      }
+    },
+    "widget": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Platform widget name. Only the names of the catalogue are accepted.",
+          "enum": [
+            "properties",
+            "comments",
+            "doc-status",
+            "record-actions",
+            "doc-associations",
+            "doc-preview",
+            "events-history",
+            "versions-journal",
+            "current-tasks",
+            "tasks",
+            "activities",
+            "documents",
+            "journal",
+            "user-profile",
+            "barcode",
+            "stages",
+            "charts"
+          ]
+        },
+        "documentTypes": {
+          "type": "array",
+          "description": "`documents` widget only: refs of the document types the widget accepts, e.g. `emodel/type@contract-scan`. Every ref must be an EXISTING type.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "canUpload": {
+          "type": "boolean",
+          "description": "`documents` widget only: whether the user may upload files. Default true.",
+          "default": true
+        },
+        "journalId": {
+          "type": "string",
+          "description": "`journal` widget only: id (or ref) of an EXISTING journal to embed."
+        },
+        "graphicTypeId": {
+          "type": "string",
+          "enum": [
+            "vertical-bar",
+            "doughnut",
+            "line",
+            "funnel"
+          ]
+        },
+        "groupBy": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "attribute"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "attribute": {
+                "type": "string",
+                "pattern": "^[a-zA-Z_][a-zA-Z0-9_:.-]*$"
+              },
+              "step": {
+                "type": "string",
+                "enum": [
+                  "hour",
+                  "day",
+                  "week",
+                  "month",
+                  "quarter",
+                  "year"
+                ]
+              },
+              "dateRange": {
+                "type": "string",
+                "pattern": "^(\\$[A-Z_]+|-?P[0-9YMWDTHS]+|[0-9]{4}-[0-9]{2}-[0-9]{2}[0-9T:.Z+-]*)(/(\\$[A-Z_]+|-?P[0-9YMWDTHS]+|[0-9]{4}-[0-9]{2}-[0-9]{2}[0-9T:.Z+-]*))?$"
+              }
+            }
+          }
+        },
+        "aggregate": {
+          "type": "string",
+          "pattern": "^(count|(sum|avg)\\([a-zA-Z_][a-zA-Z0-9_:.-]*\\))$"
+        },
+        "title": {
+          "$ref": "#/definitions/mlText"
+        },
+        "sourceWidgetId": {
+          "type": "string",
+          "description": "Existing chart identity from loaded IR only; preserve it when editing. Omit for a new chart."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "charts"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "graphicTypeId",
+              "groupBy",
+              "aggregate",
+              "title"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "journalId"
+                  ]
+                },
+                {
+                  "required": [
+                    "typeRef"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "column": {
+      "type": "object",
+      "required": [
+        "widgets"
+      ],
+      "properties": {
+        "width": {
+          "type": "string",
+          "description": "Optional CSS width of the narrow column, e.g. `25%`. Only meaningful in a two-column layout."
+        },
+        "widgets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/widget"
+          }
+        }
+      }
+    },
+    "tab": {
+      "type": "object",
+      "required": [
+        "label",
+        "columns"
+      ],
+      "properties": {
+        "label": {
+          "$ref": "#/definitions/mlText",
+          "description": "Tab caption."
+        },
+        "layout": {
+          "type": "string",
+          "description": "Column layout of the tab.",
+          "enum": [
+            "1-column",
+            "2-columns-big-small",
+            "2-columns-small-big"
+          ],
+          "default": "1-column"
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/definitions/column"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Dashboard id, kebab-case. Convention: `<typeLocalId>-dashboard`.",
+      "pattern": "^[\\w$:.-]+$"
+    },
+    "name": {
+      "$ref": "#/definitions/mlText",
+      "description": "Dashboard title."
+    },
+    "typeRef": {
+      "type": "string",
+      "description": "Ref of the data type whose records this dashboard renders, e.g. `emodel/type@purchase-request`."
+    },
+    "authority": {
+      "type": "string",
+      "description": "Leave empty: a generated dashboard is the type's dashboard, not one person's."
+    },
+    "scope": {
+      "type": "string",
+      "description": "Leave empty unless the user names a scope explicitly."
+    },
+    "tabs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/tab"
+      }
+    }
+  }
+}

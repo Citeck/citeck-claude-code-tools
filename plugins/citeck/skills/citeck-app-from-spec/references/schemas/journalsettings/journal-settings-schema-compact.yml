@@ -1,0 +1,104 @@
+# Compact reference of the Citeck journal settings artifact (uiserv/journal-settings).
+#
+# A journal-settings record is a SAVED VIEW over an existing journal — what the platform UI calls
+# a «шаблон» / report in the journal's settings menu: a column subset, a sort order, a grouping
+# and a filter. It is NOT a field of the journal and it does NOT replace the journal: the journal
+# says what the list IS, this says how one group of users wants to look at it.
+#
+# There is no ecos-idea-plugin schema for this kind; the reference was assembled from ecos-uiserv
+# `domain/journalsettings/dto/JournalSettingsDto.kt` and the report artifacts of
+# ecos-service-desk.
+
+type: object
+required:
+  - id
+  - name
+  - journalId
+  - settings
+properties:
+
+  id:
+    type: string
+    description: >-
+      Journal-settings id, kebab-case. Convention: `<journalId>-<what-the-view-shows>`, e.g.
+      `purchase-request-journal-by-status`.
+
+  name:
+    description: >-
+      What the view is called in the journal's settings list — the user picks it by this name,
+      so it must say what the view SHOWS («Заявки в работе по подразделениям»), not «Настройка 1».
+    type: object
+    properties:
+      ru: { type: string }
+      en: { type: string }
+
+  journalId:
+    type: string
+    description: >-
+      LOCAL id of the journal this view belongs to — `purchase-request-journal`, NOT
+      `uiserv/journal@purchase-request-journal`. The journal must already exist.
+
+  authorities:
+    type: array
+    description: >-
+      Who sees the view. `GROUP_EVERYONE` shares it with everybody; a group id
+      (`GROUP_accountants`) with one group; an empty list keeps it private to the author.
+      Default to `[GROUP_EVERYONE]` for a view the user describes as «общий отчёт»; when the
+      request implies a restricted audience, never guess the group (the prompt says what to do).
+    items: { type: string }
+
+  settings:
+    type: object
+    description: The view itself.
+    properties:
+
+      columns:
+        type: array
+        description: >-
+          Columns of the view, in display order. EVERY `id` must be an attribute of the journal's
+          TYPE (or a service attribute) — the same grounding rule as the journal's own columns.
+          Omit `columns` entirely to keep the journal's columns unchanged and only re-sort /
+          re-group / filter.
+        items:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string, description: Attribute id. }
+            text: { type: string, description: Column header override. Omit to keep the journal's. }
+            hidden: { type: boolean, default: false }
+
+      sortBy:
+        type: array
+        description: Sort order, most significant first.
+        items:
+          type: object
+          required: [attribute]
+          properties:
+            attribute: { type: string }
+            ascending: { type: boolean, default: false }
+
+      groupBy:
+        type: array
+        description: >-
+          Attribute ids the rows are aggregated by — this is what turns a list into a report
+          («по подразделениям», «по статусам»). ONE attribute in the overwhelming majority of
+          cases. Every id must be an attribute of the journal's type.
+        items: { type: string }
+
+      predicate:
+        type: object
+        description: >-
+          Filter of the view, in the platform predicate format:
+          `{"t":"and","val":[{"t":"eq","att":"_status","val":"approval"}]}`.
+          Attributes and status ids used here are checked against the type exactly like the
+          journal's own filter.
+
+# ---------------------------------------------------------------------------
+# Conventions
+# ---------------------------------------------------------------------------
+#
+# - A view exists to answer ONE question. «Все заявки» is not a view — that is the journal.
+# - `groupBy` without an aggregate column set is the normal report shape: the platform counts the
+#   rows of each group by itself.
+# - Do NOT copy the whole journal into `settings.columns` just to change the sorting. Leave
+#   `columns` out when the column set is not what the user is changing.

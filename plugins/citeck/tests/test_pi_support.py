@@ -32,7 +32,7 @@ def test_pi_package_resources():
         assert nested_paths == bridge_paths
         assert all(path.exists() for path in nested_paths)
     assert len(package["pi"]["extensions"]) == 1
-    assert len(list((PLUGIN / package["pi"]["skills"][0]).glob("*/SKILL.md"))) == 5
+    assert len(list((PLUGIN / package["pi"]["skills"][0]).glob("*/SKILL.md"))) == 6
     assert "@earendil-works/pi-coding-agent" not in package.get("dependencies", {})
 
 

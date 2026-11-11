@@ -1,0 +1,138 @@
+# Compact reference of the Citeck kanban board artifact (uiserv/board).
+#
+# Derived from the full `board-schema.json` (ecos-idea-plugin `citeck/artifacts/ui/board/`) the
+# same way `journal-schema-compact.yml` is derived from the journal schema: the full schema is
+# what the VALIDATOR reads, this file is what the PROMPT injects. Nothing here contradicts the
+# full schema; the two corrections the platform source forced (`hideItemsOlderThan` is an
+# ISO-8601 duration, not a day count; `hasSum`/`sumAtt` exist and the plugin schema omits them)
+# are applied in BOTH files.
+#
+# Provenance: ecos-uiserv `domain/board/dto/BoardDef.java` + `BoardColumnDef.kt`.
+
+type: object
+required:
+  - id
+  - name
+  - typeRef
+  - columns
+properties:
+
+  id:
+    type: string
+    description: >-
+      Board id, kebab-case. Convention: `<typeLocalId>-board`
+      (type `purchase-request` → board `purchase-request-board`).
+
+  name:
+    description: Board title, i18n object.
+    type: object
+    properties:
+      ru: { type: string }
+      en: { type: string }
+
+  typeRef:
+    type: string
+    description: >-
+      Ref of the data type whose records the board shows, e.g. `emodel/type@purchase-request`.
+      Copy it EXACTLY from the input; never invent it. The board's COLUMNS are the STATUSES of
+      this type — a board over a type with no statuses cannot exist.
+
+  journalRef:
+    type: string
+    description: >-
+      Optional ref of the journal the board is an alternative view of, e.g.
+      `uiserv/journal@purchase-request-journal`. The journal's default filter then applies to the
+      board. Set it ONLY to a journal that already exists; omit otherwise.
+
+  cardFormRef:
+    type: string
+    description: >-
+      Optional ref of the form that renders a card, e.g. `uiserv/form@purchase-request-card`.
+      Omit to use the default representation. Never invent a form ref.
+
+  cardTitleTemplate:
+    type: string
+    description: >-
+      Freemarker template of the card title over the record's own attributes, e.g.
+      `${name?str!}` or `${number?str!} — ${counterparty?disp!}`. Every attribute named here must
+      exist on the bound type.
+
+  cardFieldsLabelLayout:
+    type: string
+    enum: [TOP, LEFT]
+    default: TOP
+    description: Where a field label sits on the card. TOP unless the user asks otherwise.
+
+  readOnly:
+    type: boolean
+    default: false
+    description: >-
+      true forbids dragging a card between columns. Set it only when the user says the status must
+      not be changed from the board — a read-only kanban is an unusual request.
+
+  disableTitle:
+    type: boolean
+    default: false
+    description: true hides the card header.
+
+  actions:
+    type: array
+    description: >-
+      Refs of EXISTING actions offered on a card, e.g. `uiserv/action@edit`. You do NOT define
+      actions here — a fabricated `uiserv/action@…` ref is rejected before deployment.
+    items: { type: string }
+
+  columns:
+    type: array
+    description: >-
+      Board columns, left to right. EVERY column `id` MUST be a STATUS id of the bound type,
+      copied exactly. A column whose id is not a status of the type shows nothing and is rejected
+      before deployment.
+    items:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: Status id of the bound type, e.g. `approval`.
+        name:
+          description: >-
+            Column header, i18n object. Omit to let the status's own name through; set it only
+            when the status name reads badly as a column header.
+          type: object
+          properties:
+            ru: { type: string }
+            en: { type: string }
+        hasSum:
+          type: boolean
+          default: false
+          description: >-
+            true shows a sum in the column header. Use it for money-shaped boards (deals,
+            payments, orders) and only together with `sumAtt`.
+        sumAtt:
+          type: string
+          description: >-
+            NUMBER attribute of the bound type summed in the header, e.g. `amount`. Must exist on
+            the type and must be numeric.
+        hideOldItems:
+          type: boolean
+          default: false
+          description: true hides cards older than `hideItemsOlderThan`.
+        hideItemsOlderThan:
+          type: string
+          description: >-
+            ISO-8601 duration, e.g. `P30D` (30 days), `P180D` (half a year). Only
+            meaningful with `hideOldItems: true`. NOT a number of days. The platform
+            parses it with `Duration.parse`, so express the period in days/hours/minutes:
+            month and year units (`P6M`, `P1Y`) are REJECTED.
+
+# ---------------------------------------------------------------------------
+# Column-set conventions
+# ---------------------------------------------------------------------------
+#
+# - A board column per WORKFLOW status, in the order the work actually flows, ending with the
+#   terminal states. Statuses the user never sees on a board (technical/system states) are left
+#   out — a board is not obliged to show every status the type has.
+# - `hasSum`/`sumAtt` belong on EVERY column or on none: a sum shown in three columns out of nine
+#   reads as a bug.
+# - The initial status of the type is the leftmost column.

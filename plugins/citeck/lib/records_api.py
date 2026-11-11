@@ -7,7 +7,7 @@ import json
 import urllib.request
 import urllib.error
 
-from . import auth, config
+from . import auth, config, guards
 
 QUERY_PATH = "/gateway/api/records/query"
 MUTATE_PATH = "/gateway/api/records/mutate"
@@ -56,6 +56,7 @@ def request(path, body, profile=None, config_dir=None, timeout=DEFAULT_TIMEOUT,
     """
     try:
         base_url = _get_base_url(profile, config_dir)
+        guards.check_server_allowed(base_url)
         if expected_server is not None and base_url != expected_server.rstrip("/"):
             raise RecordsApiError("Profile server changed. Preview the issue again and confirm the new server.")
         auth_header = auth.get_auth_header(profile, config_dir)
@@ -64,6 +65,8 @@ def request(path, body, profile=None, config_dir=None, timeout=DEFAULT_TIMEOUT,
     except auth.AuthError as e:
         raise RecordsApiError(str(e)) from e
     except config.ConfigError as e:
+        raise RecordsApiError(str(e)) from e
+    except guards.GuardError as e:
         raise RecordsApiError(str(e)) from e
 
     url = base_url + path

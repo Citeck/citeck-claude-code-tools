@@ -1,0 +1,138 @@
+# Compact reference of Citeck type permissions (`emodel/perms`).
+#
+# Provenance: ecos-idea-plugin `citeck/artifacts/model/permissions/permissions-schema.json` plus
+# `TypePermsDef` (ecos-model-lib) for the write shape.
+#
+# ⚠️ The artifact kind is spelled `model/permissions` in an application, but the records sourceId is
+# `emodel/perms`. A ref built from the artifact-kind name addresses nothing.
+#
+# The artifact answers ONE question: who may READ and who may WRITE a record of this type, in each
+# of its statuses. It grants nothing by itself to a user — it grants to a ROLE of the type, and the
+# type decides who is in that role.
+
+type: object
+required:
+  - id
+  - typeRef
+properties:
+
+  id:
+    type: string
+    description: >-
+      Permissions id. Convention: `<typeLocalId>-permissions` (`purchase-request-permissions`).
+      On a MODIFICATION keep the existing id — changing it creates a second, competing matrix.
+
+  typeRef:
+    type: string
+    pattern: '^[\w$/.-]+@[\w$/.:-]+$'
+    description: >-
+      The type these permissions apply to, exactly as the inputs give it — e.g.
+      `emodel/type@purchase-request`, or `emodel/type@my-workspace:purchase-request` for a type that
+      lives in a workspace (keep the workspace prefix).
+
+  permissions:
+    type: object
+    description: Access to the RECORD as a whole.
+    properties:
+
+      matrix:
+        type: object
+        description: >-
+          role → status → level. The rows are ROLE ids of the type (plus the system role
+          `EVERYONE`), the columns are STATUS ids of the type (plus `ANY`), the cells are `READ`,
+          `WRITE` or `NONE`.
+          ⚠️ How the platform reads a cell: the level is the STATUS cell — an unset one is READ —
+          united with the `ANY` cell. So `ANY` can only RAISE access: `ANY: WRITE` gives WRITE in
+          every status, `ANY: READ` changes nothing, and `ANY: NONE` alone would close nothing — the
+          code therefore writes `NONE` into every status cell such a row leaves unset (and into
+          `EMPTY`, the status of a record that has none) before the deploy; a status cell you set is
+          kept. A type with no statuses has the one column `EMPTY`. A role the matrix does not name
+          reads the record.
+          ⚠️ Use ONLY role ids and status ids the type actually declares — they are listed in the
+          grounded type context you were given. An invented role id silently grants nobody anything,
+          and an invented status id is a column no record ever reaches.
+          Example:
+            matrix:
+              initiator:      { draft: WRITE, approval: READ,  approved: READ }
+              approver:       { draft: NONE,  approval: WRITE, approved: READ }
+              EVERYONE:       { draft: NONE,  approval: NONE,  approved: NONE }
+        additionalProperties:
+          type: object
+          additionalProperties:
+            enum: [READ, WRITE, NONE]
+
+      rules:
+        type: array
+        description: >-
+          Exceptions the matrix cannot express: a rule ALLOWs or REVOKEs a permission for a set of
+          roles in a set of statuses, optionally under a condition on the record.
+          Prefer the matrix; reach for a rule only when the access depends on the record's data.
+        items:
+          type: object
+          required: [roles, permissions, statuses]
+          properties:
+            roles: { type: array, items: { type: string }, description: 'Role ids (or EVERYONE)' }
+            permissions: { type: array, items: { enum: [READ, WRITE] } }
+            statuses:
+              type: array
+              description: >-
+                Status ids the rule applies in — REQUIRED. An EMPTY list [] means EVERY status,
+                the terminal ones and a record without a status included — write it only when that is
+                meant. `ANY` is a matrix column, NOT a rule status: the platform compares a rule's
+                statuses literally, so `ANY` here would never match — the code writes `[]` (every
+                status) in place of a list that names `ANY`.
+              items: { type: string }
+            condition:
+              type: object
+              description: >-
+                ECOS predicate over the record, e.g. {"t":"eq","att":"amount","val":0}. Every `att`
+                must be a real attribute of the type. This condition IS evaluated at runtime — it is
+                shown in full on the deploy-confirmation card. Its values are compared as written: the
+                platform substitutes nothing, so a current-user placeholder ($user, $CURRENT, ${user})
+                never matches the person in a field — «only the person in the field» is the role whose
+                performer is that field, not a condition. The status is never compared here: `_status` reads
+                as the status NAME in a condition — list the statuses in `statuses` instead.
+            type: { enum: [ALLOW, REVOKE], description: 'ALLOW by default' }
+
+  attributes:
+    type: object
+    description: >-
+      Per-ATTRIBUTE access, keyed by attribute id, each value shaped exactly like `permissions`
+      above (`matrix` / `rules`). Use it when one field is more restricted than the record
+      («сумму видит только бухгалтерия»). ⚠️ Every key must be a real attribute of the type.
+      Leave it as `{}` when no field needs its own rule.
+      ⚠️ A NON-EMPTY `attributes` is a closed list on the platform: every field of the type it does
+      not name becomes READ-ONLY for everybody, and a write to it is silently dropped. List here ONLY
+      the fields with their own rule — the code then gives every other field of the type a copy of the
+      record-level `permissions` block, so those fields behave exactly as the record does. Do not
+      copy the record block onto other fields yourself. An EXISTING matrix that already lists fields
+      is not completed by the code: on its edit keep its `attributes` exactly as they are unless the
+      user asks to change a field's access. A listed field whose block EQUALS the record-level block
+      follows the record: on a change of the record level leave that block as it is — the code gives
+      it the new record-level block. A field with a block of its own is not touched.
+      ⚠️ A field's WRITE works only where the role may also WRITE the record: the platform checks the
+      record-level access FIRST and refuses the whole change («You can't change record») before it
+      looks at the fields. For «поле X меняет только роль R» give R WRITE on field X only and leave
+      R's record-level cell as the user asked: the code raises that cell to WRITE itself and keeps R
+      READ on every other field — their blocks become the record block plus an unconditional
+      `REVOKE WRITE` rule for R (a restricted copy). Leave a restricted copy as it is; to let R change
+      that field, remove its REVOKE rule. Do not raise the cell yourself. WRITE on the record also lets the
+      role delete the record. The fields an aspect of the
+      type brings (`<prefix>:<id>`) are fields of the type too: the code completes them like the others.
+    additionalProperties:
+      type: object
+      properties:
+        matrix: { type: object }
+        rules: { type: array }
+
+# Conventions that are not in the schema but decide whether the matrix is usable:
+#
+# 1. A role that can never WRITE anywhere makes the record read-only for its holders — state it only
+#    when the user asked for it.
+# 2. `EVERYONE` is the whole system, authenticated users included. Granting it WRITE in any status
+#    is almost never what a business request means; grant it only when the request says so.
+# 3. A status the process moves the record to, but which no role may WRITE in, freezes the record —
+#    that is a legitimate design for a terminal status («Согласовано»), and a defect for a working
+#    one.
+# 4. A role whose assignment is COMPUTED BY SCRIPT resolves to whoever the script returns at
+#    runtime; granting it WRITE means granting whatever that script decides.

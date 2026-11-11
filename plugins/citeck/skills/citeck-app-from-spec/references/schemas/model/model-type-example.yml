@@ -1,0 +1,397 @@
+---
+id: ept-issue
+name:
+  ru: Задача трекера
+  en: Tracker issue
+description:
+  ru: Тип для представления задачи в системе трекинга задач.
+  en: Type to represent an issue in the issue tracking system.
+system: true
+storageType: ECOS_MODEL
+parentRef: emodel/type@case
+formRef: uiserv/form@ept-issue-form
+journalRef: uiserv/journal@ept-issue-journal
+defaultStatus: backlog
+inheritForm: false
+inheritNumTemplate: true
+dispNameTemplate:
+  ru: ${issueKey} ${summary}
+  en: ${issueKey} ${summary}
+actions:
+  - uiserv/action@ept-issue-change-status
+  - uiserv/action@track-time-action
+  - uiserv/action@delete
+associations:
+  - id: is-caused-by
+    name:
+      ru: Вызвана
+      en: Is caused by
+    attribute: issue-links:problem
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+  - id: causes
+    name:
+      ru: Вызывает
+      en: Causes
+    attribute: issue-links:problem
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+    direction: SOURCE
+  - id: is-blocked-by
+    name:
+      ru: Заблокирована
+      en: Is blocked by
+    attribute: issue-links:blocker
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+  - id: blocks
+    name:
+      ru: Блокирует
+      en: Blocks
+    attribute: issue-links:blocker
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+    direction: SOURCE
+  - id: is-duplicated-by
+    name:
+      ru: Дублируется
+      en: Is duplicated by
+    attribute: issue-links:duplicate
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+  - id: duplicates
+    name:
+      ru: Дублирует
+      en: Duplicates
+    attribute: issue-links:duplicate
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+    direction: SOURCE
+  - id: is-cloned-by
+    name:
+      ru: Клонируется
+      en: Is cloned by
+    attribute: issue-links:clone
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+  - id: clones
+    name:
+      ru: Клонирует
+      en: Clones
+    attribute: issue-links:clone
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+    direction: SOURCE
+  - id: relates-to
+    name:
+      ru: Связана с
+      en: Relates to
+    attribute: issue-links:relates
+    target: emodel/type@ept-issue
+    journalsFromTarget: false
+    journals:
+      - uiserv/journal@ept-issue-links-journal
+    direction: BOTH
+createVariants:
+  - id: ept-issue-task
+    name:
+      ru: Задача
+      en: Task
+    attributes:
+      _type: ept-issue-task
+  - id: ept-issue-story
+    name:
+      ru: История
+      en: Story
+    attributes:
+      _type: ept-issue-story
+  - id: ept-issue-bug
+    name:
+      ru: Ошибка
+      en: Bug
+    attributes:
+      _type: ept-issue-bug
+  - id: ept-issue-epic
+    name:
+      ru: Эпик
+      en: Epic
+    attributes:
+      _type: ept-issue-epic
+model:
+  roles:
+    - id: initiator
+      name:
+        ru: Инициатор
+        en: Initiator
+      attributes:
+        - reporter
+    - id: implementer
+      name:
+        ru: Исполнитель
+        en: Implementer
+      attributes:
+        - implementer
+    - id: observer
+      name:
+        ru: Наблюдатели
+        en: Observers
+      attributes:
+        - observers
+  statuses:
+    - id: backlog
+      name:
+        ru: Бэклог
+        en: Backlog
+    - id: to-do
+      name:
+        ru: К выполнению
+        en: To do
+    - id: in-progress
+      name:
+        ru: В работе
+        en: In progress
+    - id: review
+      name:
+        ru: Ревью
+        en: Review
+    - id: waiting-for-qa
+      name:
+        ru: Ожидание тестирования
+        en: Waiting for QA
+    - id: in-qa-review
+      name:
+        ru: В тестировании
+        en: In QA Review
+    - id: done
+      name:
+        ru: Выполнено
+        en: Done
+    - id: on-hold
+      name:
+        ru: Заблокировано
+        en: On hold
+  stages:
+    - name:
+        ru: Ожидание разработки
+        en: To do
+      statuses:
+        - to-do
+        - on-hold
+        - backlog
+    - name:
+        ru: В работе
+        en: In progress
+      statuses:
+        - in-progress
+        - review
+        - waiting-for-qa
+        - in-qa-review
+    - name:
+        ru: Выполнено
+        en: Done
+      statuses:
+        - done
+  attributes:
+    - id: issueType
+      name:
+        ru: Тип
+        en: Type
+      computed:
+        type: ATTRIBUTE
+        config:
+          attribute: _type
+        storingType: NONE
+    - id: issueKey
+      name:
+        ru: Номер
+        en: Number
+      computed:
+        type: SCRIPT
+        config:
+          fn: |-
+            var project = value.load('link-project:project.key');
+            var eptNumber = value.load('eptNumber?num');
+            return project + '-' + eptNumber;
+        storingType: ON_CREATE
+    - id: summary
+      name:
+        ru: Заголовок
+        en: Summary
+    - id: description
+      name:
+        ru: Описание
+        en: Description
+    - id: priority
+      name:
+        ru: Приоритет
+        en: Priority
+      type: OPTIONS
+      config:
+        source: values
+        values:
+          - value: 100_urgent
+            label:
+              ru: Срочный
+              en: Urgent
+          - value: 200_high
+            label:
+              ru: Высокий
+              en: High
+          - value: 300_medium
+            label:
+              ru: Средний
+              en: Medium
+          - value: 400_low
+            label:
+              ru: Низкий
+              en: Low
+    - id: observers
+      name:
+        ru: Наблюдатели
+        en: Observers
+      type: AUTHORITY
+      multiple: true
+    - id: epicLink
+      name:
+        ru: Ссылка на Эпик
+        en: Epic link
+      type: ASSOC
+      config:
+        typeRef: emodel/type@ept-issue
+        child: false
+    - id: fixInVersion
+      name:
+        ru: Версии исправления
+        en: Fix versions
+      type: ASSOC
+      config:
+        typeRef: emodel/type@ecos-release-type
+        child: false
+      multiple: true
+    - id: affectedVersions
+      name:
+        ru: Затронутые версии
+        en: Affected versions
+      type: ASSOC
+      config:
+        typeRef: emodel/type@ecos-release-type
+        child: false
+      multiple: true
+    - id: reporter
+      name:
+        ru: Инициатор
+        en: Reporter
+      type: PERSON
+    - id: implementer
+      name:
+        ru: Исполнитель
+        en: Implementer
+      type: PERSON
+    - id: estimatedWorks
+      name:
+        ru: Планируемые трудозатраты
+        en: Estimated works
+    - id: manualEstimatedWorksMills
+      name:
+        ru: Ручное оставшееся время (мс)
+        en: Manual remaining time (ms)
+      type: NUMBER
+    - id: remainingEstimateMills
+      name:
+        ru: Оставшееся время (мс)
+        en: Remaining time (ms)
+      type: NUMBER
+    - id: deadline
+      name:
+        ru: Дедлайн
+        en: Deadline
+      type: DATETIME
+    - id: endDate
+      name:
+        ru: Дата закрытия
+        en: Resolution date
+      type: DATETIME
+    - id: environment
+      name:
+        ru: Окружение
+        en: Environment
+    - id: tags
+      name:
+        ru: Теги
+        en: Tags
+      type: ASSOC
+      config:
+        typeRef: emodel/type@ept-tags
+        child: false
+      multiple: true
+    - id: resolution
+      name:
+        ru: Решение
+        en: Resolution
+      type: ASSOC
+      config:
+        typeRef: emodel/type@ept-issue-resolution
+        child: false
+    - id: components
+      name:
+        ru: Компоненты
+        en: Components
+      type: ASSOC
+      config:
+        typeRef: emodel/type@ept-components
+        child: false
+      multiple: true
+    - id: sprint
+      name:
+        ru: Спринт
+        en: Sprint
+      type: ASSOC
+      config:
+        typeRef: emodel/type@ept-sprint
+        child: false
+      multiple: true
+    - id: subtasks
+      name:
+        ru: Подзадачи
+        en: Subtasks
+      type: ASSOC
+      config:
+        typeRef: emodel/type@ept-issue-subtask
+        child: true
+      multiple: true
+    - id: eptNumber
+      name:
+        ru: Номер
+        en: Number
+      type: NUMBER
+      computed:
+        type: COUNTER
+        config:
+          numTemplateRef: emodel/num-template@ept-issue-num-template
+        storingType: ON_CREATE
+aspects:
+  - ref: emodel/aspect@has-documents
+    inheritConfig: false
+  - ref: emodel/aspect@time-trackable
+    inheritConfig: false
+  - ref: emodel/aspect@link-project
+    inheritConfig: false
+  - ref: emodel/aspect@issue-links
+    inheritConfig: false
+workspaceScope: PRIVATE

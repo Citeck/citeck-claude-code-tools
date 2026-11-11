@@ -1,5 +1,6 @@
 """Citeck ECOS MCP server for Claude Code and Codex."""
 
+import json
 import mimetypes
 import os
 import re
@@ -40,6 +41,13 @@ from lib.records_api import (
     records_mutate as lib_records_mutate,
     RecordsApiError,
 )
+from lib.guards import GuardError, check_mutation_allowed
+from lib.bpmn_tools import (
+    read_definition,
+    validate as lib_bpmn_validate,
+    layout as lib_bpmn_layout,
+)
+from lib.app_deploy import DeployError, deploy as lib_deploy_app
 from lib.rag_api import (
     search_docs as lib_search_docs,
     resolve_docs_profile,
@@ -301,6 +309,20 @@ def records_query(
         return {"ok": False, "error": f"Unexpected error: {e}"}
 
 
+def _records_error_messages(body: str | None) -> list[str]:
+    """ERROR message texts from a Records API response body, or [] when there are none."""
+    try:
+        data = json.loads(body or "")
+    except ValueError:
+        return []
+    result = []
+    for message in (data.get("messages") or []) if isinstance(data, dict) else []:
+        if str(message.get("level", "")).upper() == "ERROR":
+            msg = message.get("msg")
+            result.append(str(msg.get("msg") or msg.get("message") or msg) if isinstance(msg, dict) else str(msg))
+    return result
+
+
 @mcp.tool
 def records_mutate(
     records: list[dict],
@@ -329,6 +351,7 @@ def records_mutate(
         }
 
     try:
+        check_mutation_allowed(records)
         resolved, creds = resolve_records_profile(profile=profile, config_dir=config_dir)
         server_url = creds["url"].rstrip("/")
         response = lib_records_mutate(
@@ -338,12 +361,129 @@ def records_mutate(
             config_dir=config_dir,
         )
         return {"ok": True, "profile": resolved, "server": server_url, **response}
+    except GuardError as e:
+        return {"ok": False, "refused": True, "error": str(e)}
     except RecordsApiError as e:
+        # The Records API answers a refused mutation with HTTP 500 and the reason in the body.
+        platform_errors = _records_error_messages(e.response_body)
+        if platform_errors:
+            return {"ok": False, "error": str(e), "platform_errors": platform_errors}
         return {"ok": False, "error": str(e)}
     except ConfigError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"Unexpected error: {e}"}
+
+
+@mcp.tool
+def bpmn_validate(file_path: str, profile: str | None = None) -> dict:
+    """Validate a BPMN process file with the platform (VALIDATE_GENERAL_BPMN). Saves nothing.
+
+    Call it for every process file before bpmn_layout and before deploy_app.
+    Outcomes: "valid"; "document_error" (fix the file, call again, `errors` holds the platform
+    text); "service_unavailable" (the platform did not check; do not rewrite the process).
+
+    Args:
+        file_path: Path to the .bpmn.xml file in the application directory.
+        profile: Override the profile for this call only. Usually leave empty.
+    """
+    definition, error = read_definition(file_path)
+    if error:
+        return error
+    try:
+        resolved, _ = resolve_records_profile(profile=profile, config_dir=_get_config_dir())
+        return {**lib_bpmn_validate(definition, profile=resolved, config_dir=_get_config_dir()),
+                "file": os.path.abspath(os.path.expanduser(file_path))}
+    except ConfigError as e:
+        return {"ok": False, "outcome": "bad_request", "error": str(e)}
+
+
+@mcp.tool
+def bpmn_layout(file_path: str, output_path: str | None = None, profile: str | None = None) -> dict:
+    """Lay out the diagram of a BPMN process file with the platform and write it back to the file.
+
+    Do not write `bpmndi:*` yourself: write the semantic process, run bpmn_validate, then this
+    tool. On success the file is rewritten with the diagram; the XML is not returned.
+    Outcomes: "laid_out"; "layout_rejected" (not BPMN XML: fix the file); "layout_failed" and
+    "unknown_after_timeout" (the platform may still be computing: run bpmn_validate, wait two
+    minutes, call once more, then give up); "service_unavailable" (do not regenerate the process).
+    Only an unreachable service is retried inside the tool.
+
+    Keep the semantic source outside artifacts/ and give `output_path` inside it: the platform
+    rewrites the laid-out file (attribute order, escaping), so edits must go to the source.
+
+    Args:
+        file_path: Path to the semantic .bpmn.xml (e.g. process-src/<id>.bpmn.xml).
+        output_path: Where to write the laid-out file (e.g. artifacts/process/bpmn/<id>.bpmn.xml);
+            defaults to file_path itself.
+        profile: Override the profile for this call only. Usually leave empty.
+    """
+    definition, error = read_definition(file_path)
+    if error:
+        return error
+    path = os.path.abspath(os.path.expanduser(output_path or file_path))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    try:
+        resolved, _ = resolve_records_profile(profile=profile, config_dir=_get_config_dir())
+    except ConfigError as e:
+        return {"ok": False, "outcome": "bad_request", "error": str(e)}
+    result = lib_bpmn_layout(definition, profile=resolved, config_dir=_get_config_dir())
+    if not result.get("ok"):
+        return {**result, "file": path, "file_changed": False}
+    laid_out = result.pop("definition")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(laid_out)
+    return {**result, "file": path, "file_changed": True, "size": len(laid_out)}
+
+
+@mcp.tool
+def deploy_app(
+    app_dir: str,
+    workspace: str | None = None,
+    members: list[str] | None = None,
+    wait_seconds: int = 240,
+    profile: str | None = None,
+) -> dict:
+    """Deploy an ecos-apps application directory into its own workspace and report every artifact.
+
+    The directory holds meta.json ({id, name, version}) and artifacts/<kind>/... files. The tool
+    zips it, uploads it into the workspace (created if absent, private), waits until this upload
+    is processed and returns each changed artifact with DEPLOYED or DEPLOY_FAILED and the platform
+    error text. Inside the archive, refer to types of the workspace as emodel/type@CURRENT_WS:<id>.
+    If the directory is in git, the tool commits it after the deploy and returns the hash.
+
+    Refused: another workspace than the generation one or a global one (default), an application id
+    installed on the stand, an artifacts/model/workspace artifact, permissions naming a type outside
+    the workspace, an artifact patch whose `workspace` is not this workspace, a patch naming
+    records or artifacts of another workspace or global artifacts.
+
+    Outcomes: "deployed", "deployed_with_errors" (fix the named artifacts, deploy again),
+    "unchanged", "no_artifact_changes", "import_failed" (`import_errors`: the archive could not be
+    read), "timeout" (`pending` lists artifacts without a confirmed result), "upload_rejected",
+    "unconfirmed" (no ecos-apps log: the end of the upload cannot be confirmed). `ok` is true only
+    when this upload is confirmed finished and no artifact of the app is failed. Every deploy makes
+    one commit (also without file changes); name its hash in the journal.
+
+    Args:
+        app_dir: Path to the application directory.
+        workspace: Target workspace id (defaults to CITECK_GEN_WORKSPACE).
+        members: User names to add to the workspace as ordinary members (for checks as a participant).
+        wait_seconds: How long to wait for the platform (default 240).
+        profile: Override the profile for this call only. Usually leave empty: the operator's
+            CITECK_DEPLOY_PROFILE (an admin) is used, not the active profile.
+    """
+    try:
+        # Deploys go under the deploy profile (an admin) whatever profile the agent made active to act
+        # as a participant; an explicit `profile` still wins.
+        deploy_profile = profile or os.environ.get("CITECK_DEPLOY_PROFILE") or None
+        resolved, _ = resolve_records_profile(profile=deploy_profile, config_dir=_get_config_dir())
+        return lib_deploy_app(app_dir, workspace=workspace, members=members,
+                              wait_seconds=max(30, min(int(wait_seconds), 900)),
+                              profile=resolved, config_dir=_get_config_dir())
+    except DeployError as e:
+        return {"ok": False, "outcome": "refused", "error": str(e)}
+    except (RecordsApiError, ConfigError) as e:
+        return {"ok": False, "outcome": "service_unavailable", "error": str(e)}
 
 
 @mcp.tool

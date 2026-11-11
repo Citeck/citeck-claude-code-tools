@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Citeck Journal Settings Schema",
+  "description": "Saved view (report) over an existing journal: uiserv/journal-settings. Assembled from ecos-uiserv `domain/journalsettings/dto/JournalSettingsDto.kt` and the real artifacts of ecos-service-desk — the ecos-idea-plugin has no schema for this kind.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "journalId",
+    "settings"
+  ],
+  "definitions": {
+    "mlText": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "ru": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      }
+    },
+    "sortBy": {
+      "type": "object",
+      "required": [
+        "attribute"
+      ],
+      "properties": {
+        "attribute": {
+          "type": "string",
+          "description": "Attribute of the journal's type to sort by."
+        },
+        "ascending": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Attribute id of the journal's type, or a service attribute."
+        },
+        "text": {
+          "type": "string",
+          "description": "Column header override."
+        },
+        "hidden": {
+          "type": "boolean",
+          "default": false
+        },
+        "width": {
+          "type": "integer"
+        }
+      }
+    }
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[\\w$:.-]+$",
+      "description": "Journal-settings id, kebab-case."
+    },
+    "name": {
+      "$ref": "#/definitions/mlText",
+      "description": "What this saved view is called in the journal's settings list."
+    },
+    "journalId": {
+      "type": "string",
+      "description": "LOCAL id of the journal this view belongs to (not a ref), e.g. `purchase-request-journal`."
+    },
+    "authorities": {
+      "type": "array",
+      "description": "Authorities the view is shared with, e.g. `GROUP_EVERYONE`. Empty means the author only.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "workspaces": {
+      "type": "array",
+      "description": "Workspace ids the view is visible in. Omit to keep the platform default.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "The view itself: which columns, in what order, sorted and grouped how, filtered by what.",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/column"
+          }
+        },
+        "sortBy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sortBy"
+          }
+        },
+        "groupBy": {
+          "type": "array",
+          "description": "Attribute ids (or grouping expressions) the rows are aggregated by.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "predicate": {
+          "type": "object",
+          "description": "Filter of the view, in the platform predicate format."
+        }
+      }
+    }
+  }
+}

@@ -20,3 +20,6 @@ __pycache__/
 
 # ralphex progress logs
 .ralphex/progress/
+
+# Playwright MCP session artifacts
+.playwright-mcp/

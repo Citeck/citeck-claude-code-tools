@@ -1,0 +1,136 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Citeck Board Schema",
+  "description": "Schema for Citeck kanban board YAML files",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "typeRef",
+    "columns"
+  ],
+  "definitions": {
+    "mlText": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Text value"
+        },
+        {
+          "type": "object",
+          "description": "Multilingual text",
+          "minProperties": 1,
+          "properties": {
+            "ru": {
+              "type": "string",
+              "description": "Russian text"
+            },
+            "en": {
+              "type": "string",
+              "description": "English text"
+            }
+          }
+        }
+      ]
+    },
+    "boardColumn": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Column identifier (status ID)"
+        },
+        "name": {
+          "$ref": "#/definitions/mlText",
+          "description": "Column display name"
+        },
+        "hideOldItems": {
+          "type": "boolean",
+          "description": "Whether to hide old items in this column",
+          "default": false
+        },
+        "hideItemsOlderThan": {
+          "type": "string",
+          "description": "ISO-8601 duration after which items are hidden, e.g. 'P30D'"
+        },
+        "hasSum": {
+          "type": "boolean",
+          "description": "Whether the column header shows a sum over sumAtt",
+          "default": false
+        },
+        "sumAtt": {
+          "type": "string",
+          "description": "Numeric attribute of the bound type summed in the column header"
+        }
+      }
+    }
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the board",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+    },
+    "typeRef": {
+      "type": "string",
+      "description": "Reference to data type"
+    },
+    "journalRef": {
+      "type": "string",
+      "description": "Reference to journal"
+    },
+    "cardFormRef": {
+      "type": "string",
+      "description": "Reference to card form"
+    },
+    "cardFieldsLabelLayout": {
+      "type": "string",
+      "description": "Position of field labels on cards",
+      "enum": [
+        "LEFT",
+        "TOP"
+      ],
+      "default": "TOP"
+    },
+    "readOnly": {
+      "type": "boolean",
+      "description": "Whether the board is read-only",
+      "default": false
+    },
+    "disableTitle": {
+      "type": "boolean",
+      "description": "Whether to hide card titles",
+      "default": false
+    },
+    "name": {
+      "$ref": "#/definitions/mlText",
+      "description": "Board display name"
+    },
+    "actions": {
+      "type": "array",
+      "description": "List of actions available on the board",
+      "items": {
+        "type": "string"
+      }
+    },
+    "columns": {
+      "type": "array",
+      "description": "List of board columns",
+      "items": {
+        "$ref": "#/definitions/boardColumn"
+      }
+    },
+    "cardTitleTemplate": {
+      "type": "string",
+      "description": "Freemarker template of the card title, e.g. ${name?str!}"
+    },
+    "workspace": {
+      "type": "string",
+      "description": "Workspace the board belongs to; empty for a global board"
+    }
+  }
+}

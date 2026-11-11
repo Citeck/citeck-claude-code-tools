@@ -29,7 +29,7 @@ def test_manifests_and_marketplaces():
             assert value.startswith("./") and ".." not in Path(value).parts
             assert (PLUGIN / value).exists()
         skills = list((PLUGIN / manifest["skills"]).glob("*/SKILL.md"))
-        assert len(skills) == 5
+        assert len(skills) == 6
         servers = json.loads((PLUGIN / manifest["mcpServers"]).read_text())["mcpServers"]
         assert set(servers) == {"citeck"}
     for folder in (".claude-plugin", ".agents/plugins"):
@@ -92,7 +92,8 @@ async def test_relocated_server_and_resources(tmp_path, use_config_override):
     )
     async with Client(transport) as client:
         names = {tool.name for tool in await client.list_tools()}
-        assert {"ping", "search_docs", "preview_issue", "create_issue", "reauthenticate"} <= names
+        assert {"ping", "search_docs", "preview_issue", "create_issue", "reauthenticate",
+                "bpmn_validate", "bpmn_layout", "deploy_app"} <= names
         assert (await client.call_tool("ping", {})).data == {"ok": True}
         profiles = (await client.call_tool("list_profiles", {})).data
         assert profiles["ok"] is True

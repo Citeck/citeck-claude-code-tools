@@ -1,0 +1,5 @@
+interface:
+  display_name: "Citeck: App From Spec"
+  short_description: "Build, deploy and check a Citeck application from a requirements document"
+policy:
+  allow_implicit_invocation: false

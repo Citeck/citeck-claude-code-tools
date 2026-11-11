@@ -1,0 +1,93 @@
+# Artifact patch (eapps/artifact-patch) — the compact reference injected into the generation prompt.
+# Full JSON Schema: schemas/patch/artifact-patch-schema.json (used by the validator, not by the model).
+#
+# A patch is a record that CHANGES SOMEBODY ELSE'S artifact. The platform re-applies it every time
+# the target is redeployed, storing the result as a separate revision of the target.
+
+root:
+  id: string            # kebab-case, says what the patch does: add-contracts-in-left-menu
+  name:                 # i18n, shown in the platform's artifact list
+    ru: string
+    en: string
+  target: string        # ecos-apps artifact ref: <artifactType>$<localId>, e.g. ui/menu$default-menu-v1
+  workspace: string     # workspace id of the PATCHED artifact; "" for a global one
+  order: number         # optional; order among the patches of one target, lower runs first
+  enabled: boolean      # optional, default true
+  type: json            # the only supported value
+  config:
+    operations: [ operation, ... ]   # at least one
+
+artifact_types:         # the `target` vocabulary is ecos-apps types, NOT records sourceIds
+  model/type: data type            # records emodel/type@<id>
+  model/permissions: type permissions
+  ui/form: form
+  ui/journal: journal
+  ui/journal-settings: saved view
+  ui/board: kanban board
+  ui/dashboard: record card
+  ui/action: record action
+  ui/menu: menu
+  process/bpmn: BPMN process
+  notification/template: notification template
+
+operation:
+  op: add | set | remove | rename-key      # CLOSED dictionary: anything else fails while applying
+  path: string                             # JsonPath into the target's content
+  value: any                               # add / set only
+  idx: integer                             # add only: insert position, appended when omitted
+  key: string                              # set only: set this key inside the object(s) at path
+  oldKey: string                           # rename-key only
+  newKey: string                           # rename-key only
+
+operation_semantics:
+  add: |
+    Appends to the ARRAY the path resolves to. An array `value` is appended element-wise
+    (addAll), a scalar/object `value` as one element.
+  set: |
+    Assigns the value at the path. With `key`, sets that key inside the object(s) the path
+    resolves to instead.
+  remove: |
+    Deletes what the path resolves to.
+  rename-key: |
+    Renames `oldKey` to `newKey` inside the object(s) the path resolves to.
+
+path_examples:
+  - '$.actions'                                         # a type's action list
+  - '$.subMenu.left.items'                              # the left menu's top-level items
+  - '$.associations[?(@.id == "assoc:associatedWith")].journals'   # a filtered element of an array
+  - '$..[?(@.id == "sections")].items'                  # a section anywhere in the document
+
+examples:
+  add_action_to_a_foreign_type:
+    id: add-action-commercial-offer-to-deal
+    name: { ru: 'Добавить действие «Коммерческое предложение» к сделке', en: 'Add commercial offer action to deal' }
+    target: 'model/type$deal'
+    type: json
+    config:
+      operations:
+        - op: add
+          path: '$.actions'
+          value: 'uiserv/action@commercial-offer-template-action'
+  add_section_to_the_left_menu:
+    id: add-contracts-in-left-menu
+    name: { ru: 'Добавить раздел «Договоры»', en: 'Add section Contracts' }
+    target: 'ui/menu$default-menu-v1'
+    type: json
+    config:
+      operations:
+        - op: add
+          path: '$..[?(@.id == "sections")].items'
+          value:
+            id: ecos-contracts-section
+            label: { ru: Договоры, en: Contracts }
+            type: SECTION
+            hidden: false
+            config: {}
+            action: { type: '', config: {} }
+            items:
+              - id: contracts
+                label: { ru: Договоры, en: Contracts }
+                type: JOURNAL
+                config: { recordRef: 'uiserv/journal@ecos-contract-journal' }
+                items: []
+            allowedFor: []
